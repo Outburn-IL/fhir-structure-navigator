@@ -1,0 +1,169 @@
+{
+  "resourceType": "ImplementationGuide",
+  "id": "fsg.test.pkg",
+  "url": "http://example.org/ImplementationGuide/fsg.test.pkg",
+  "version": "0.1.0",
+  "name": "FsgTestPkg",
+  "status": "draft",
+  "publisher": "Outburn Ltd.",
+  "contact": [
+    {
+      "name": "Outburn Ltd.",
+      "telecom": [
+        {
+          "system": "url",
+          "value": "https://outburn.health"
+        }
+      ]
+    }
+  ],
+  "packageId": "fsg.test.pkg",
+  "fhirVersion": [
+    "4.0.1"
+  ],
+  "definition": {
+    "resource": [
+      {
+        "reference": {
+          "reference": "StructureDefinition/CodeableConceptSliceInherit"
+        },
+        "name": "CodeableConcept.coding with extension on all slices and another on a slice",
+        "description": "For testing slice inheritace from head and addition of slices with a small SD",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/ComplexLiberalExtension"
+        },
+        "name": "ComplexLiberalExtension",
+        "description": "An extension that defines two liberal child elements",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/ExtensionWithPolySlice"
+        },
+        "name": "ExtensionWithPolySlice",
+        "description": "An extension with one slice on value[x]",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/ExtensionWithPolySlices"
+        },
+        "name": "ExtensionWithPolySlices",
+        "description": "An extension with slices on value[x]",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/fixed-system-identifier"
+        },
+        "name": "FixedSystemIdentifier",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/fixed-system-patient-identifier"
+        },
+        "name": "FixedSystemPatientIdentifier",
+        "description": "A test profile of the Patient resource with fixed identifier system on all slices.",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/FixedSystemPatientIdentifierProfile"
+        },
+        "name": "FixedSystemPatientIdentifierProfile",
+        "description": "A test profile of the Patient resource with identifier profiles for all slices.",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/ext-hearing-loss"
+        },
+        "name": "HearingLossDisability",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/OrganizationBasicProfile"
+        },
+        "name": "OrganizationBasicProfile",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/PatientIdentifierDeepDiff"
+        },
+        "name": "PatientIdentifierDeepDiff",
+        "description": "A test profile of the Patient resource with a deep diff on all slices of identifier.",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/PatientNameDiff"
+        },
+        "name": "PatientNameDiff",
+        "description": "Patient profile with diff on name.",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/PractitionerQualificationSlices"
+        },
+        "name": "PractitionerQualificationSlices",
+        "description": "Practitioner with complex Qualification slices",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/SimpleBinaryTypeExtension"
+        },
+        "name": "SimpleBinaryTypeExtension",
+        "description": "An extension that only confines the value[x] polymorphic to two types",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/SimpleCardinalityPatient"
+        },
+        "name": "SimpleCardinalityPatient",
+        "description": "A test profile of the Patient resource with simple cardinality diffs only.",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/SimpleLiberalExtension"
+        },
+        "name": "SimpleLiberalExtension",
+        "description": "An extension that only defines a fixedUri, no other constraints",
+        "exampleBoolean": false
+      },
+      {
+        "reference": {
+          "reference": "StructureDefinition/SimpleMonopolyExtension"
+        },
+        "name": "SimpleMonopolyExtension",
+        "description": "An extension that only confines the value[x] polymorphic to a single type",
+        "exampleBoolean": false
+      }
+    ],
+    "page": {
+      "nameUrl": "toc.html",
+      "title": "Table of Contents",
+      "generation": "html",
+      "page": []
+    },
+    "parameter": [
+      {
+        "code": "copyrightyear",
+        "value": "2025+"
+      },
+      {
+        "code": "releaselabel",
+        "value": "test"
+      }
+    ]
+  }
+}

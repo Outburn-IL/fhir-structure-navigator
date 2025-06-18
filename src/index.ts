@@ -3,7 +3,7 @@
  *   Project name: fhir-structure-navigator
  */
 
-import { FhirSnapshotGenerator, ElementDefinition } from 'fhir-snapshot-generator';
+import { FhirSnapshotGenerator, ElementDefinition, ILogger } from 'fhir-snapshot-generator';
 
 export interface EnrichedElementDefinition extends ElementDefinition {
   __fromDefinition: string;
@@ -36,16 +36,23 @@ const splitFshPath = (path: string): string[] => {
 
 export class FhirStructureNavigator {
   private fsg: FhirSnapshotGenerator;
+  private logger: ILogger;
   
   constructor(fsg: FhirSnapshotGenerator) {
     this.fsg = fsg;
+    this.logger = fsg.getLogger(); // TODO: Implement a dedicated logger instead of using FSG's logger
   }
 
   async getElement(
     snapshotId: string,
     fshPath: string
   ): Promise<EnrichedElementDefinition> {
+    this.logger.info(
+      `Resolving element for path "${fshPath}" in snapshot "${snapshotId}"`);
     const segments = splitFshPath(fshPath);
+    this.logger.info(
+      `Parsed segments: ${JSON.stringify(segments)}`
+    );
     return await this._resolvePath(snapshotId, segments);
   }
 
@@ -97,11 +104,13 @@ export class FhirStructureNavigator {
     return []; // No children found
   }
 
-
   private async _resolvePath(
     snapshotId: string,
     pathSegments: string[]
   ): Promise<EnrichedElementDefinition> {
+    this.logger.info(
+      `Resolving path "${pathSegments.join('.')}" in snapshot "${snapshotId}"`
+    );
     const snapshot = await this.fsg.getSnapshot(snapshotId);
     const elements: ElementDefinition[] = snapshot.snapshot.element;
 
@@ -120,6 +129,9 @@ export class FhirStructureNavigator {
     for (let i = 0; i < pathSegments.length; i++) {
       const segment = pathSegments[i];
       const { base, slice } = this._parseSegment(segment);
+      this.logger.info(
+        `Processing segment "${segment}" (base: "${base}", slice: "${slice ?? ''}")`
+      );
       const searchPath = `${currentPath}.${base}`;
 
       previousElement = currentElement;
@@ -224,17 +236,29 @@ export class FhirStructureNavigator {
     for (const el of elements) {
     // 1. Direct match
       if (el.id === searchPath || el.id === `${searchPath}[x]`) {
+        this.logger.info(`Direct match found for path "${searchPath}"`);
         return { element: el };
       }
 
       // 2. Polymorphic base match + suffix disambiguation
       if (this._isPolymorphic(el)) {
+        this.logger.info(`Checking polymorphic element "${el.id}" for path "${searchPath}"`);
         const basePath = el.id.slice(0, -3); // remove [x]
         const typeMatch = el.type?.find(t => {
           return `${basePath}${initCap(t.code)}` === searchPath;
         });
         if (typeMatch) {
-          return { element: el, narrowedType: typeMatch };
+          this.logger.info(`Polymorphic match found for path "${searchPath}" with type "${typeMatch.code}"`);
+          this.logger.info('Trying to resolve actual polymorphic slice...');
+          // before returning the narrowed polymorphic, check if there is an explicit slice for that type
+          // 1. build the slice name by taking the last segment of element id and removing the [x] and append initCap(typeCode)
+          const sliceName = `${el.id.split('.').pop()?.slice(0, -3)}${initCap(typeMatch.code)}`;
+          this.logger.info(`Looking for slice "${sliceName}" under ${el.id}`);
+          const sliceMatch = elements.find(e => {
+            this.logger.info(`Checking element "${e.id}" for slice match against ${el.id}:${sliceName}`);
+            return e.id === `${el.id}:${sliceName}`;
+          });
+          return { element: sliceMatch ?? el, narrowedType: sliceMatch ? undefined : typeMatch };
         }
 
         // 3. Bracket form (e.g. value[valueString] → valueString → value[x] narrowed)

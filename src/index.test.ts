@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
 import { FhirStructureNavigator } from '@outburn/structure-navigator'; // Adjust path as needed
 
-const context = ['hl7.fhir.us.core@6.1.0'];
+const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0'];
 
 let fetcher: FhirStructureNavigator;
 
@@ -43,11 +43,41 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('Quantity');
   });
 
+  it('resolves a real polymorphic slice using shortcut form (valueString)', async () => {
+    const profile = 'http://example.org/StructureDefinition/ExtensionWithPolySlices';
+    const el = await fetcher.getElement(profile, 'valueString');
+    expect(el.id).toBe('Extension.value[x]:valueString');
+    expect(el.__fromDefinition).toBe(profile);
+  });
+
+  it('resolves a polymorphic head when real slices exist on other types', async () => {
+    const profile = 'http://example.org/StructureDefinition/ExtensionWithPolySlices';
+    const el = await fetcher.getElement(profile, 'valueBoolean');
+    expect(el.id).toBe('Extension.value[x]');
+    expect(el.__fromDefinition).toBe(profile);
+    expect(el.type?.length).toBe(1);
+    expect(el.type?.[0].code).toBe('boolean');
+  });
+
   it('resolves a polymorphic type using short bracket syntax (value[string])', async () => {
     const el = await fetcher.getElement('Extension', 'value[string]');
     expect(el.path).toBe('Extension.value[x]');
     expect(el.type?.length).toBe(1);
     expect(el.type?.[0].code).toBe('string');
+  });
+
+  it('resolves a real polymorphic slice using short bracket syntax (value[string])', async () => {
+    const profile = 'http://example.org/StructureDefinition/ExtensionWithPolySlices';
+    const el = await fetcher.getElement(profile, 'value[string]');
+    expect(el.id).toBe('Extension.value[x]:valueString');
+    expect(el.__fromDefinition).toBe(profile);
+  });
+
+  it('resolves a real polymorphic slice using long bracket syntax (value[valueString])', async () => {
+    const profile = 'http://example.org/StructureDefinition/ExtensionWithPolySlices';
+    const el = await fetcher.getElement(profile, 'value[valueString]');
+    expect(el.id).toBe('Extension.value[x]:valueString');
+    expect(el.__fromDefinition).toBe(profile);
   });
 
   it('resolves a polymorphic type using short bracket syntax (value[CodeableConcept])', async () => {
@@ -64,6 +94,7 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('string');
   });
 
+  // TODO: support this feature
   it.skip('resolves a polymorphic type using long bracket syntax (value[valueCodeableConcept])', async () => {
     const el = await fetcher.getElement('Extension', 'value[valueCodeableConcept]');
     expect(el.path).toBe('Extension.value[x]');
