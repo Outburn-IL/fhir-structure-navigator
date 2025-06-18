@@ -1,4 +1,5 @@
 node_modules
-/dist
-test/.test-cache
+dist
 .vscode
+test/.test-cache
+!test/.test-cache/fsg.test.pkg#0.1.0/package/**
