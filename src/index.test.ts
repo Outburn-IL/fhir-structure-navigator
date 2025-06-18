@@ -87,6 +87,7 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('CodeableConcept');
   });
 
+  // TODO: support this feature
   it.skip('resolves a polymorphic type using long bracket syntax (value[valueString])', async () => {
     const el = await fetcher.getElement('Extension', 'value[valueString]');
     expect(el.path).toBe('Extension.value[x]');
@@ -94,7 +95,6 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('string');
   });
 
-  // TODO: support this feature
   it.skip('resolves a polymorphic type using long bracket syntax (value[valueCodeableConcept])', async () => {
     const el = await fetcher.getElement('Extension', 'value[valueCodeableConcept]');
     expect(el.path).toBe('Extension.value[x]');
@@ -185,11 +185,21 @@ describe('ElementFetcher', () => {
     expect(children.some(c => c.path === 'Patient.identifier.use')).toBe(true);
   });
 
+  it('gets children of a deep element path', async () => {
+    const children = await fetcher.getChildren('us-core-patient', 'identifier.assigner.identifier.assigner.display');
+    expect(children.some(c => c.path === 'string.extension')).toBe(true);
+  });
+
   it('gets rebased children (e.g. identifier.value children from string)', async () => {
     const children = await fetcher.getChildren('Patient', 'identifier.value');
     const childPaths = children.map(c => c.path);
     expect(childPaths).toContain('string.extension');
     expect(childPaths).toContain('string.id');
+  });
+
+  it('gets chidren of a polymorphic type using shortcut form (valueString)', async () => {
+    const children = await fetcher.getChildren('Extension', 'valueString');
+    expect(children.some(c => c.path === 'string.extension')).toBe(true);
   });
 
   // TODO:
