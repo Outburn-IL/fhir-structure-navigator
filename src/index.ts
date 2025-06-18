@@ -142,8 +142,24 @@ export class FhirStructureNavigator {
       currentElement = resolvedElement;
 
       if (currentElement && narrowedType) {
-        currentElement = { ...currentElement, type: [narrowedType] };
+        const narrowed = { ...currentElement, type: [narrowedType] };
+
+        // Attempt to find an explicit slice for the narrowed type
+        const lastSegment = currentElement.id?.split('.').pop() ?? '';
+        const baseName = lastSegment.slice(0, -3); // remove [x]
+        const sliceName = `${baseName}${initCap(narrowedType.code)}`;
+        const sliceId = `${currentElement.id}:${sliceName}`;
+        const sliceMatch = elements.find(e => e.id === sliceId);
+
+        if (sliceMatch) {
+          this.logger.info(`Resolved narrowed polymorphic slice: ${sliceId}`);
+          currentElement = sliceMatch;
+        } else {
+          this.logger.info(`Using narrowed polymorphic type directly: ${narrowedType.code}`);
+          currentElement = narrowed;
+        }
       }
+
 
       // Handle rebasing by contentReference
       if (!currentElement && previousElement?.contentReference) {
@@ -169,29 +185,29 @@ export class FhirStructureNavigator {
 
       // Handle slice syntax
       if (slice) {
-        const sliceId = `${searchPath}:${slice}`;
+        const sliceId = `${currentElement.id}:${slice}`;
         const sliceMatch = elements.find(el => el.id === sliceId);
 
         if (sliceMatch) {
           currentElement = sliceMatch;
-        } else {
-          if (this._isPolymorphic(currentElement)) {
-            const matchedType = currentElement.type?.find(
-              t => t.code?.toLowerCase() === slice.toLowerCase()
-            );
-            if (matchedType) {
-              currentElement = {
-                ...currentElement,
-                type: [matchedType]
-              };
+        } else if (this._isPolymorphic(currentElement)) {
+          const matchedType = currentElement.type?.find(
+            t => t.code === slice
+          );
+
+          if (matchedType) {
+            const lastSegment = currentElement.id?.split('.').pop() ?? '';
+            const baseName = lastSegment.slice(0, -3); // remove [x]
+            const inferredSliceName = `${baseName}${initCap(matchedType.code)}`;
+            const inferredSliceId = `${currentElement.id}:${inferredSliceName}`;
+            const inferredSliceMatch = elements.find(e => e.id === inferredSliceId);
+
+            if (inferredSliceMatch) {
+              this.logger.info(`Resolved bracket slice via inferred slice id: ${inferredSliceId}`);
+              currentElement = inferredSliceMatch;
             } else {
-              const trySnapshot = await this._tryResolveSnapshot(slice);
-              if (trySnapshot) {
-                return await this._resolvePath(trySnapshot, pathSegments.slice(i + 1));
-              }
-              throw new Error(
-                `"${slice}" is not a known slice of ${searchPath}, a valid type for ${currentElement.path}, or a resolvable StructureDefinition`
-              );
+              this.logger.info(`Falling back to narrowed polymorphic for bracket slice: ${matchedType.code}`);
+              currentElement = { ...currentElement, type: [matchedType] };
             }
           } else {
             const trySnapshot = await this._tryResolveSnapshot(slice);
@@ -199,11 +215,20 @@ export class FhirStructureNavigator {
               return await this._resolvePath(trySnapshot, pathSegments.slice(i + 1));
             }
             throw new Error(
-              `"${slice}" is not a known slice of ${searchPath}, or a resolvable StructureDefinition`
+              `"${slice}" is not a known slice of ${searchPath}, a valid type for ${currentElement.path}, or a resolvable StructureDefinition`
             );
           }
+        } else {
+          const trySnapshot = await this._tryResolveSnapshot(slice);
+          if (trySnapshot) {
+            return await this._resolvePath(trySnapshot, pathSegments.slice(i + 1));
+          }
+          throw new Error(
+            `"${slice}" is not a known slice of ${searchPath}, or a resolvable StructureDefinition`
+          );
         }
       }
+
 
       currentPath = currentElement.path!;
     }
@@ -249,16 +274,7 @@ export class FhirStructureNavigator {
         });
         if (typeMatch) {
           this.logger.info(`Polymorphic match found for path "${searchPath}" with type "${typeMatch.code}"`);
-          this.logger.info('Trying to resolve actual polymorphic slice...');
-          // before returning the narrowed polymorphic, check if there is an explicit slice for that type
-          // 1. build the slice name by taking the last segment of element id and removing the [x] and append initCap(typeCode)
-          const sliceName = `${el.id.split('.').pop()?.slice(0, -3)}${initCap(typeMatch.code)}`;
-          this.logger.info(`Looking for slice "${sliceName}" under ${el.id}`);
-          const sliceMatch = elements.find(e => {
-            this.logger.info(`Checking element "${e.id}" for slice match against ${el.id}:${sliceName}`);
-            return e.id === `${el.id}:${sliceName}`;
-          });
-          return { element: sliceMatch ?? el, narrowedType: sliceMatch ? undefined : typeMatch };
+          return { element: el, narrowedType: typeMatch };
         }
 
         // 3. Bracket form (e.g. value[valueString] → valueString → value[x] narrowed)
