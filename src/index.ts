@@ -34,83 +34,121 @@ const splitFshPath = (path: string): string[] => {
   return segments;
 };
 
+const defaultLogger: ILogger = {
+  info: (msg: any) => console.log(msg),
+  warn: (msg: any) => console.warn(msg),
+  error: (msg: any) => console.error(msg)
+};
+
+const defaultPrethrow = (msg: Error | any): Error => {
+  if (msg instanceof Error) {
+    return msg;
+  }
+  const error = new Error(msg);
+  return error;
+};
+
+const customPrethrower = (logger: ILogger) => {
+  return (msg: Error | any): Error => {
+    if (msg instanceof Error) {
+      logger.error(msg);
+      return msg;
+    }
+    const error = new Error(msg);
+    logger.error(error);
+    return error;
+  };
+};
+
 export class FhirStructureNavigator {
   private fsg: FhirSnapshotGenerator;
   private logger: ILogger;
+  // eslint-disable-next-line no-unused-vars
+  private prethrow: (msg: Error | any) => Error;
   
-  constructor(fsg: FhirSnapshotGenerator) {
+  constructor(fsg: FhirSnapshotGenerator, logger?: ILogger) {
     this.fsg = fsg;
-    this.logger = fsg.getLogger(); // TODO: Implement a dedicated logger instead of using FSG's logger
+    if (logger) {
+      this.logger = logger;
+      this.prethrow = customPrethrower(this.logger);
+    } else {
+      this.logger = defaultLogger;
+      this.prethrow = defaultPrethrow;
+    }
+  }
+
+  public getLogger(): ILogger {
+    return this.logger;
   }
 
   async getElement(
     snapshotId: string,
     fshPath: string
   ): Promise<EnrichedElementDefinition> {
-    this.logger.info(
-      `Resolving element for path "${fshPath}" in snapshot "${snapshotId}"`);
-    const segments = splitFshPath(fshPath);
-    this.logger.info(
-      `Parsed segments: ${JSON.stringify(segments)}`
-    );
-    return await this._resolvePath(snapshotId, segments);
+    try {
+      const segments = splitFshPath(fshPath);
+      return await this._resolvePath(snapshotId, segments);
+    } catch (error) {
+      throw this.prethrow(error);
+    }
   }
 
   async getChildren(
     snapshotId: string,
     fshPath: string
   ): Promise<EnrichedElementDefinition[]> {
-    const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
-    const resolved = await this._resolvePath(snapshotId, segments);
-    const parentId = resolved.path!;
-    const snapshotUrl = resolved.__fromDefinition;
+    try {
+      const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
+      const resolved = await this._resolvePath(snapshotId, segments);
+      const parentId = resolved.path!;
+      const snapshotUrl = resolved.__fromDefinition;
 
-    const snapshot = await this.fsg.getSnapshot(snapshotUrl);
-    const elements = snapshot.snapshot.element;
+      const snapshot = await this.fsg.getSnapshot(snapshotUrl);
+      const elements = snapshot.snapshot.element;
 
-    const directChildren = elements.filter(el => {
-      if (!el.id?.startsWith(`${parentId}.`)) return false;
-      const remainder = el.id.slice(parentId.length + 1);
-      return remainder.length > 0 && !remainder.includes('.');
-    });
+      const directChildren = elements.filter(el => {
+        if (!el.id?.startsWith(`${parentId}.`)) return false;
+        const remainder = el.id.slice(parentId.length + 1);
+        return remainder.length > 0 && !remainder.includes('.');
+      });
 
-    if (directChildren.length > 0) {
-      return directChildren.map(el => ({
-        ...el,
-        __fromDefinition: snapshotUrl
-      }));
+      if (directChildren.length > 0) {
+        return directChildren.map(el => ({
+          ...el,
+          __fromDefinition: snapshotUrl
+        }));
+      }
+
+      // Check for contentReference
+      if (resolved.contentReference) {
+        const refPath = resolved.contentReference.replace(/^#/, '');
+        const baseType = snapshot.type;
+        return await this.getChildren(baseType, refPath);
+      }
+
+      // if more than one type, we can't resolve children, throw an error
+      if (resolved.type && resolved.type.length > 1) {
+        throw new Error(
+          `Cannot resolve children for choice type element ${resolved.path}.`
+        );
+      }
+
+      // Rebase and continue under the base type
+      const typeCode = resolved.type?.[0]?.code;
+      if (typeCode) {
+        return await this.getChildren(typeCode, '.');
+      }
+
+      return []; // No children found
+    } catch (error) {
+      throw this.prethrow(error);
     }
-
-    // Check for contentReference
-    if (resolved.contentReference) {
-      const refPath = resolved.contentReference.replace(/^#/, '');
-      const baseType = snapshot.type;
-      return await this.getChildren(baseType, refPath);
-    }
-
-    // if more than one type, we can't resolve children, throw an error
-    if (resolved.type && resolved.type.length > 1) {
-      throw new Error(
-        `Cannot resolve children for choice type element ${resolved.path}.`
-      );
-    }
-
-    // Rebase and continue under the base type
-    const typeCode = resolved.type?.[0]?.code;
-    if (typeCode) {
-      return await this.getChildren(typeCode, '.');
-    }
-
-    return []; // No children found
   }
 
   private async _resolvePath(
     snapshotId: string,
     pathSegments: string[]
   ): Promise<EnrichedElementDefinition> {
-    this.logger.info(
-      `Resolving path "${pathSegments.join('.')}" in snapshot "${snapshotId}"`
-    );
     const snapshot = await this.fsg.getSnapshot(snapshotId);
     const elements: ElementDefinition[] = snapshot.snapshot.element;
 
@@ -129,9 +167,6 @@ export class FhirStructureNavigator {
     for (let i = 0; i < pathSegments.length; i++) {
       const segment = pathSegments[i];
       const { base, slice } = this._parseSegment(segment);
-      this.logger.info(
-        `Processing segment "${segment}" (base: "${base}", slice: "${slice ?? ''}")`
-      );
       const searchPath = `${currentPath}.${base}`;
 
       previousElement = currentElement;
@@ -152,10 +187,8 @@ export class FhirStructureNavigator {
         const sliceMatch = elements.find(e => e.id === sliceId);
 
         if (sliceMatch) {
-          this.logger.info(`Resolved narrowed polymorphic slice: ${sliceId}`);
           currentElement = sliceMatch;
         } else {
-          this.logger.info(`Using narrowed polymorphic type directly: ${narrowedType.code}`);
           currentElement = narrowed;
         }
       }
@@ -203,10 +236,8 @@ export class FhirStructureNavigator {
             const inferredSliceMatch = elements.find(e => e.id === inferredSliceId);
 
             if (inferredSliceMatch) {
-              this.logger.info(`Resolved bracket slice via inferred slice id: ${inferredSliceId}`);
               currentElement = inferredSliceMatch;
             } else {
-              this.logger.info(`Falling back to narrowed polymorphic for bracket slice: ${matchedType.code}`);
               currentElement = { ...currentElement, type: [matchedType] };
             }
           } else {
@@ -261,19 +292,16 @@ export class FhirStructureNavigator {
     for (const el of elements) {
     // 1. Direct match
       if (el.id === searchPath || el.id === `${searchPath}[x]`) {
-        this.logger.info(`Direct match found for path "${searchPath}"`);
         return { element: el };
       }
 
       // 2. Polymorphic base match + suffix disambiguation
       if (this._isPolymorphic(el)) {
-        this.logger.info(`Checking polymorphic element "${el.id}" for path "${searchPath}"`);
         const basePath = el.id.slice(0, -3); // remove [x]
         const typeMatch = el.type?.find(t => {
           return `${basePath}${initCap(t.code)}` === searchPath;
         });
         if (typeMatch) {
-          this.logger.info(`Polymorphic match found for path "${searchPath}" with type "${typeMatch.code}"`);
           return { element: el, narrowedType: typeMatch };
         }
 
