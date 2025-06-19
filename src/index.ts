@@ -3,62 +3,12 @@
  *   Project name: fhir-structure-navigator
  */
 
-import { FhirSnapshotGenerator, ElementDefinition, ILogger } from 'fhir-snapshot-generator';
+import { FhirSnapshotGenerator, ElementDefinition, ILogger, PackageIdentifier } from 'fhir-snapshot-generator';
+import { customPrethrower, defaultLogger, defaultPrethrow, splitFshPath, initCap } from './utils';
 
 export interface EnrichedElementDefinition extends ElementDefinition {
   __fromDefinition: string;
 }
-
-const initCap = (str: string): string => {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-};
-
-const splitFshPath = (path: string): string[] => {
-  const segments: string[] = [];
-  let current = '';
-  let inBrackets = false;
-
-  for (const char of path) {
-    if (char === '[') inBrackets = true;
-    if (char === ']') inBrackets = false;
-
-    if (char === '.' && !inBrackets) {
-      segments.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-
-  if (current) segments.push(current);
-  return segments;
-};
-
-const defaultLogger: ILogger = {
-  info: (msg: any) => console.log(msg),
-  warn: (msg: any) => console.warn(msg),
-  error: (msg: any) => console.error(msg)
-};
-
-const defaultPrethrow = (msg: Error | any): Error => {
-  if (msg instanceof Error) {
-    return msg;
-  }
-  const error = new Error(msg);
-  return error;
-};
-
-const customPrethrower = (logger: ILogger) => {
-  return (msg: Error | any): Error => {
-    if (msg instanceof Error) {
-      logger.error(msg);
-      return msg;
-    }
-    const error = new Error(msg);
-    logger.error(error);
-    return error;
-  };
-};
 
 export class FhirStructureNavigator {
   private fsg: FhirSnapshotGenerator;
@@ -103,25 +53,25 @@ export class FhirStructureNavigator {
       const parentId = resolved.path!;
       const snapshotUrl = resolved.__fromDefinition;
 
-      const snapshot = await this.fsg.getSnapshot(snapshotUrl);
+      const snapshot = await this.fsg.getSnapshot(snapshotId);
       const elements = snapshot.snapshot.element;
 
-      const directChildren = elements.filter(el => {
+      const directChildren = elements.filter((el: ElementDefinition) => {
         if (!el.id?.startsWith(`${parentId}.`)) return false;
         const remainder = el.id.slice(parentId.length + 1);
         return remainder.length > 0 && !remainder.includes('.');
       });
 
       if (directChildren.length > 0) {
-        return directChildren.map(el => ({
+        return directChildren.map((el: ElementDefinition) => ({
           ...el,
           __fromDefinition: snapshotUrl
-        }));
+        })) as EnrichedElementDefinition[];
       }
 
       // Check for contentReference
       if (resolved.contentReference) {
-        const refPath = resolved.contentReference.replace(/^#/, '');
+        const refPath = resolved.contentReference.split('#')[1];
         const baseType = snapshot.type;
         return await this.getChildren(baseType, refPath);
       }
@@ -147,9 +97,11 @@ export class FhirStructureNavigator {
 
   private async _resolvePath(
     snapshotId: string,
-    pathSegments: string[]
+    pathSegments: string[],
+    packageFilter?: PackageIdentifier
   ): Promise<EnrichedElementDefinition> {
-    const snapshot = await this.fsg.getSnapshot(snapshotId);
+    const snapshot = await this.fsg.getSnapshot(snapshotId, packageFilter);
+
     const elements: ElementDefinition[] = snapshot.snapshot.element;
 
     if (pathSegments.length === 0) {
@@ -196,19 +148,31 @@ export class FhirStructureNavigator {
 
       // Handle rebasing by contentReference
       if (!currentElement && previousElement?.contentReference) {
-        const refPath = previousElement.contentReference.replace(/^#/, '');
+        const refPath = previousElement.contentReference.split('#')[1];
         const baseDef = snapshot.type;
         const rebasedPath = [...refPath.split('.'), ...pathSegments.slice(i)];
-        return await this._resolvePath(baseDef, rebasedPath);
+        return await this._resolvePath(baseDef, rebasedPath, snapshot.__corePackage);
       }
 
       // If still not found, try rebasing via base type
       if (!currentElement && previousElement && previousElement?.type?.length === 1) {
         const typeObj = previousElement.type[0];
-        const baseType = Array.isArray(typeObj.profile) ? typeObj.profile[0] : typeObj.code;
-        if (baseType) {
-          const rebasedPath = pathSegments.slice(i);
-          return await this._resolvePath(baseType, rebasedPath);
+        const profileUrl = Array.isArray(typeObj.profile) ? typeObj.profile[0] : undefined;
+        const baseTypeId = typeObj.code;
+        const rebasedPath = pathSegments.slice(i);
+        if (!profileUrl) {
+          // base types must be resolved in the context of the core package
+          return await this._resolvePath(baseTypeId, rebasedPath, snapshot.__corePackage);
+        } else {
+          // profiles are resolved in the context of the source snapshot's package
+          return await this._resolvePath(
+            profileUrl,
+            rebasedPath,
+            {
+              id: snapshot.__packageId,
+              version: snapshot.__packageVersion
+            }
+          );
         }
       }
 
@@ -259,8 +223,6 @@ export class FhirStructureNavigator {
           );
         }
       }
-
-
       currentPath = currentElement.path!;
     }
 

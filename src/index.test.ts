@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
-import { FhirStructureNavigator } from '@outburn/structure-navigator'; // Adjust path as needed
+import { FhirStructureNavigator } from '.';
 
 const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0'];
 
