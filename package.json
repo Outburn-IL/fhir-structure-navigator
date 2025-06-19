@@ -43,16 +43,16 @@
     "url": "git+https://github.com/Outburn-IL/fhir-structure-navigator.git"
   },
   "dependencies": {
-    "fhir-snapshot-generator": "^1.0.1"
+    "fhir-snapshot-generator": "^1.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
     "@vercel/ncc": "^0.38.3",
-    "eslint": "^9.28.0",
+    "eslint": "^9.29.0",
     "fsh-sushi": "^3.16.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.34.0",
-    "vitest": "^3.2.3"
+    "typescript-eslint": "^8.34.1",
+    "vitest": "^3.2.4"
   }
 }
