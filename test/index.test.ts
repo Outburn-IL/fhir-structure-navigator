@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
-import { FhirStructureNavigator } from '.';
+import { FhirStructureNavigator } from '@outburn/structure-navigator';
 
 const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0'];
 
@@ -41,6 +41,24 @@ describe('ElementFetcher', () => {
     expect(el.path).toBe('Extension.value[x]');
     expect(el.type?.length).toBe(1);
     expect(el.type?.[0].code).toBe('Quantity');
+  });
+
+  it('throws on polymorphic type mismatch using a base type as virtual slice (value[canonical])', async () => {
+    await expect(
+      fetcher.getElement('Observation', 'value[canonical]')
+    ).rejects.toThrow(/which is not allowed here./i);
+  });
+
+  it('throws on polymorphic type mismatch using a profile as virtual slice (value[bp])', async () => {
+    await expect(
+      fetcher.getElement('Observation', 'value[bp]')
+    ).rejects.toThrow(/which is not allowed here./i);
+  });
+
+  it('throws on type mismatch when using a virtual slice (address[bp])', async () => {
+    await expect(
+      fetcher.getElement('Patient', 'address[bp]')
+    ).rejects.toThrow(/which is not allowed here./i);
   });
 
   it('resolves a real polymorphic slice using shortcut form (valueString)', async () => {
@@ -87,7 +105,7 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('CodeableConcept');
   });
 
-  // TODO: support this feature
+  // TODO: support this feature for both real slices and virtual ones
   it.skip('resolves a polymorphic type using long bracket syntax (value[valueString])', async () => {
     const el = await fetcher.getElement('Extension', 'value[valueString]');
     expect(el.path).toBe('Extension.value[x]');
@@ -100,6 +118,13 @@ describe('ElementFetcher', () => {
     expect(el.path).toBe('Extension.value[x]');
     expect(el.type?.length).toBe(1);
     expect(el.type?.[0].code).toBe('CodeableConcept');
+  });
+
+  it.skip('resolves a profile as virtual slice on polymorphic (value[SimpleQuantity])', async () => {
+    const el = await fetcher.getElement('Observation', 'value[SimpleQuantity]');
+    expect(el.path).toBe('Observation.value[x]');
+    expect(el.type?.length).toBe(1);
+    expect(el.type?.[0].code).toBe('Quantity');
   });
 
   it('resolves a child of polymorphic using shortcut form (valueQuantity.value)', async () => {
