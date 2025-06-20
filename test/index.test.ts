@@ -226,14 +226,4 @@ describe('ElementFetcher', () => {
     const children = await fetcher.getChildren('Extension', 'valueString');
     expect(children.some(c => c.path === 'string.extension')).toBe(true);
   });
-
-  // TODO:
-  // * allow polymorphic disambiguation using a profile, e.g value[ILCoreAddress]
-  // * handle long bracket forms like value[valueString] and value[valueCodeableConcept]
-  // * enforce type match when using a virtual slice, e.g contact[ILCoreAddress] is illegal (ContactPoint <> Address)
-  // * enforce extension scope, e.g. address.extension[us-core-race] is illegal (Address <> Patient)
-  // * resolve reference snapshots in the correct context (profile context vs global context)
-  // * resolve base types in the correct FHIR version context
-  // * add more deeply nested tests for all variations of polymorhics and slices, including combinations e.g value[Reference].extension[id].valueString
-
 });
