@@ -1,0 +1,54 @@
+{
+  "name": "@outburn/structure-navigator",
+  "version": "1.0.0",
+  "description": "Navigate and resolve FHIR element definitions using FSH-like paths",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "author": "Outburn Ltd.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "rimraf dist && ncc build src/index.ts --external fhir-snapshot-generator --minify --no-cache --out dist",
+    "prepublishOnly": "npm run build",
+    "dist-to-module": "npm run build && rimraf node_modules/@outburn && node test/dist-to-module.js",
+    "pretest": "npm run dist-to-module",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "fhir",
+    "hl7",
+    "package",
+    "profile",
+    "conformance",
+    "cache",
+    "structuredefinition",
+    "snapshot",
+    "elementdefinition",
+    "type",
+    "structure",
+    "element",
+    "fsh",
+    "path"
+  ],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Outburn-IL/fhir-structure-navigator.git"
+  },
+  "dependencies": {
+    "fhir-snapshot-generator": "^1.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@vercel/ncc": "^0.38.3",
+    "eslint": "^9.29.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.1",
+    "vitest": "^3.2.4"
+  }
+}
