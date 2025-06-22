@@ -105,7 +105,6 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('CodeableConcept');
   });
 
-  // TODO: support this feature for both real slices and virtual ones
   it.skip('resolves a polymorphic type using long bracket syntax (value[valueString])', async () => {
     const el = await fetcher.getElement('Extension', 'value[valueString]');
     expect(el.path).toBe('Extension.value[x]');
