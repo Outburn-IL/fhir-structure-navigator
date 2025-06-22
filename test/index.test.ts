@@ -140,14 +140,14 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('decimal');
   });
 
-  it('resolves a deep decendant of polymorphic using shortcut form (valueReference.identifier.assigner.identifier.system)', async () => {
+  it('resolves a deep descendant of polymorphic using shortcut form (valueReference.identifier.assigner.identifier.system)', async () => {
     const el = await fetcher.getElement('Extension', 'valueReference.identifier.assigner.identifier.system');
     expect(el.path).toBe('Identifier.system');
     expect(el.type?.length).toBe(1);
     expect(el.type?.[0].code).toBe('uri');
   });
 
-  it('resolves a deep decendant of polymorphic using bracket form (value[Reference].identifier.assigner.identifier.system)', async () => {
+  it('resolves a deep descendant of polymorphic using bracket form (value[Reference].identifier.assigner.identifier.system)', async () => {
     const el = await fetcher.getElement('Extension', 'value[Reference].identifier.assigner.identifier.system');
     expect(el.path).toBe('Identifier.system');
     expect(el.type?.length).toBe(1);
