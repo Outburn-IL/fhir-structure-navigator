@@ -8,7 +8,7 @@
   "author": "Outburn Ltd.",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "rimraf dist && ncc build src/index.ts --minify --no-cache --out dist",
+    "build": "rimraf dist && ncc build src/index.ts --external fhir-snapshot-generator --minify --no-cache --out dist",
     "clear:cache": "rimraf test/.test-cache",
     "prepublishOnly": "npm run build",
     "dist-to-module": "npm run build && rimraf node_modules/@outburn && node test/dist-to-module.js",
