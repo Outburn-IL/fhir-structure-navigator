@@ -52,12 +52,11 @@ export class FhirStructureNavigator {
     fshPath: string
   ): Promise<EnrichedElementDefinition[]> {
     try {
-      const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
-
       // Check children cache
-      const cacheKey = `${snapshotId}::${fshPath}`;
+      let cacheKey = `${snapshotId}::${fshPath}`;
       const cached = this.childrenCache.get(cacheKey);
       if (cached) return cached;
+      const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
 
       const resolved = await this._resolvePath(snapshotId, segments);
       const parentId = resolved.path!;
@@ -100,7 +99,10 @@ export class FhirStructureNavigator {
       // Rebase and continue under the base type
       const typeCode = resolved.type?.[0]?.code;
       if (typeCode) {
-        return await this.getChildren(typeCode, '.');
+        cacheKey = `${typeCode}::.`;
+        const children = await this.getChildren(typeCode, '.');
+        this.childrenCache.set(cacheKey, children);
+        return children;
       }
 
       result = []; // No children found
