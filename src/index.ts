@@ -16,6 +16,9 @@ export class FhirStructureNavigator {
   private logger: ILogger;
   // eslint-disable-next-line no-unused-vars
   private prethrow: (msg: Error | any) => Error;
+  // private memory caches
+  private elementCache = new Map<string, EnrichedElementDefinition>();
+  private childrenCache = new Map<string, EnrichedElementDefinition[]>();
   
   constructor(fsg: FhirSnapshotGenerator, logger?: ILogger) {
     this.fsg = fsg;
@@ -49,7 +52,12 @@ export class FhirStructureNavigator {
     fshPath: string
   ): Promise<EnrichedElementDefinition[]> {
     try {
+      // Check children cache
+      let cacheKey = `${snapshotId}::${fshPath}`;
+      const cached = this.childrenCache.get(cacheKey);
+      if (cached) return cached;
       const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
+
       const resolved = await this._resolvePath(snapshotId, segments);
       const parentId = resolved.path!;
       const snapshotUrl = resolved.__fromDefinition;
@@ -63,11 +71,15 @@ export class FhirStructureNavigator {
         return remainder.length > 0 && !remainder.includes('.');
       });
 
+      let result: EnrichedElementDefinition[];
+
       if (directChildren.length > 0) {
-        return directChildren.map((el: ElementDefinition) => ({
+        result = directChildren.map((el: ElementDefinition) => ({
           ...el,
           __fromDefinition: snapshotUrl
         })) as EnrichedElementDefinition[];
+        this.childrenCache.set(cacheKey, result); // ✅ Cache children
+        return result;
       }
 
       // Check for contentReference
@@ -87,10 +99,15 @@ export class FhirStructureNavigator {
       // Rebase and continue under the base type
       const typeCode = resolved.type?.[0]?.code;
       if (typeCode) {
-        return await this.getChildren(typeCode, '.');
+        cacheKey = `${typeCode}::.`;
+        const children = await this.getChildren(typeCode, '.');
+        this.childrenCache.set(cacheKey, children);
+        return children;
       }
 
-      return []; // No children found
+      result = []; // No children found
+      this.childrenCache.set(cacheKey, result); // ✅ Cache empty result
+      return result;
     } catch (error) {
       throw this.prethrow(error);
     }
@@ -101,11 +118,17 @@ export class FhirStructureNavigator {
     pathSegments: string[],
     packageFilter?: PackageIdentifier
   ): Promise<EnrichedElementDefinition> {
+    let cacheKey = `${snapshotId}::${pathSegments.join('.')}`;
+    const cached = this.elementCache.get(cacheKey);
+    if (cached) return cached;
+
     const snapshot = await this.fsg.getSnapshot(snapshotId, packageFilter);
     const elements = snapshot.snapshot.element;
 
     if (pathSegments.length === 0) {
-      return { ...elements[0], __fromDefinition: snapshot.url };
+      const root = { ...elements[0], __fromDefinition: snapshot.url };
+      this.elementCache.set(cacheKey, root); // ✅ cache root
+      return root;
     }
 
     let currentElement: ElementDefinition | undefined = elements[0];
@@ -114,6 +137,16 @@ export class FhirStructureNavigator {
     let currentBaseUrl = snapshot.url;
 
     for (let i = 0; i < pathSegments.length; i++) {
+      const subPath = pathSegments.slice(0, i + 1).join('.');
+      cacheKey = `${snapshotId}::${subPath}`;
+      const cached = this.elementCache.get(cacheKey);
+      if (cached) {
+        currentElement = cached;
+        currentPath = cached.path!;
+        currentBaseUrl = cached.__fromDefinition;
+        continue;
+      }
+
       const segment = pathSegments[i];
       const { base, slice } = this._parseSegment(segment);
       const searchPath = `${currentPath}.${base}`;
@@ -140,7 +173,7 @@ export class FhirStructureNavigator {
       if (slice) {
         const resolved = await this._resolveSlice(currentElement, slice, elements, currentBaseUrl, snapshot.__corePackage);
         if (resolved) {
-          // If resolved came from a new profile (virtual slice), restart traversal in that snapshot
+        // If resolved came from a new profile (virtual slice), restart traversal in that snapshot
           if (resolved.__fromDefinition !== currentBaseUrl) {
             const remaining = pathSegments.slice(i + 1);
             return await this._resolvePath(resolved.__fromDefinition, remaining);
@@ -148,15 +181,21 @@ export class FhirStructureNavigator {
 
           currentElement = resolved;
           currentPath = resolved.path!;
+          const enriched = { ...currentElement, __fromDefinition: currentBaseUrl } as EnrichedElementDefinition;
+          this.elementCache.set(cacheKey, enriched); // ✅ cache after resolving slice
           continue;
         }
       }
 
       currentPath = currentElement.path!;
+      const enriched = { ...currentElement, __fromDefinition: currentBaseUrl } as EnrichedElementDefinition;
+      this.elementCache.set(cacheKey, enriched); // ✅ cache after resolving each segment
     }
 
-    return { ...currentElement, __fromDefinition: currentBaseUrl } as EnrichedElementDefinition;
+    const finalKey = `${snapshotId}::${pathSegments.join('.')}`;
+    return this.elementCache.get(finalKey)!; // ✅ guaranteed to be set during traversal
   }
+
 
   /**
    * Parses a single FSH-style path segment into its base element name and optional slice name.
