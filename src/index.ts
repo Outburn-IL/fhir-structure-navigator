@@ -6,9 +6,15 @@
 import { FhirSnapshotGenerator, ElementDefinition, ILogger, PackageIdentifier } from 'fhir-snapshot-generator';
 import { customPrethrower, defaultLogger, defaultPrethrow, splitFshPath, initCap } from './utils';
 import { ElementDefinitionType } from 'fhir-snapshot-generator/dist/types';
+import { FileIndexEntryWithPkg } from 'fhir-package-explorer/dist/types';
+
+export interface EnrichedElementDefinitionType extends ElementDefinitionType {
+  __kind?: string;
+}
 
 export interface EnrichedElementDefinition extends ElementDefinition {
   __fromDefinition: string;
+  type?: EnrichedElementDefinitionType[];
 }
 
 export class FhirStructureNavigator {
@@ -17,6 +23,8 @@ export class FhirStructureNavigator {
   // eslint-disable-next-line no-unused-vars
   private prethrow: (msg: Error | any) => Error;
   // private memory caches
+  private snapshotCache = new Map<string, any>(); // TODO: Define a more specific type for StructureDefinition
+  private typeMetaCache = new Map<string, FileIndexEntryWithPkg>();
   private elementCache = new Map<string, EnrichedElementDefinition>();
   private childrenCache = new Map<string, EnrichedElementDefinition[]>();
   
@@ -33,6 +41,56 @@ export class FhirStructureNavigator {
 
   public getLogger(): ILogger {
     return this.logger;
+  }
+
+  private async _getCachedSnapshot(id: string, packageFilter?: PackageIdentifier): Promise<any> {
+    const pkgId = packageFilter?.id ?? '';
+    const pkgVer = packageFilter?.version ?? '';
+    const key = `${id}::${pkgId}::${pkgVer}`;
+    let snapshot = this.snapshotCache.get(key);
+    if (!snapshot) {
+      snapshot = await this.fsg.getSnapshot(id, packageFilter);
+      const defUrl = snapshot.url;
+      // Enrich each element
+      for (const el of snapshot.snapshot.element as ElementDefinition[]) {
+        (el as EnrichedElementDefinition).__fromDefinition = defUrl;
+
+        if (el.type && Array.isArray(el.type)) {
+          for (const t of el.type) {
+            if (!t.code) continue;
+
+            if (t.code.startsWith('http://hl7.org/fhirpath/System.')) {
+              (t as EnrichedElementDefinitionType).__kind = 'system';
+            } else {
+              try {
+                const corePackageId = snapshot.__corePackage.id;
+                const corePackageVersion = snapshot.__corePackage.version;
+                const key = `${t.code}::${corePackageId}::${corePackageVersion}`;
+                let typeMeta = this.typeMetaCache.get(key);
+                if (!typeMeta) {
+                  typeMeta = await this.fsg.getFpe().resolveMeta({
+                    resourceType: 'StructureDefinition',
+                    id: t.code,
+                    package: snapshot.__corePackage
+                  });
+                  if (typeMeta) {
+                    this.typeMetaCache.set(key, typeMeta);
+                  }
+                }
+                if (typeMeta?.kind) {
+                  (t as EnrichedElementDefinitionType).__kind = typeMeta.kind;
+                }
+              } catch {
+                // Lookup failed – skip
+              }
+            }
+
+          }
+        }
+      }
+      this.snapshotCache.set(key, snapshot);
+    }
+    return snapshot;
   }
 
   async getElement(
@@ -59,13 +117,12 @@ export class FhirStructureNavigator {
       const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
 
       const resolved = await this._resolvePath(snapshotId, segments);
-      const parentId = resolved.path!;
-      const snapshotUrl = resolved.__fromDefinition;
+      const parentId = resolved.id;
 
-      const snapshot = await this.fsg.getSnapshot(snapshotId);
-      const elements = snapshot.snapshot.element;
+      const snapshot = await this._getCachedSnapshot(snapshotId);
+      const elements = snapshot.snapshot.element as EnrichedElementDefinition[];
 
-      const directChildren = elements.filter((el: ElementDefinition) => {
+      const directChildren = elements.filter((el: EnrichedElementDefinition) => {
         if (!el.id?.startsWith(`${parentId}.`)) return false;
         const remainder = el.id.slice(parentId.length + 1);
         return remainder.length > 0 && !remainder.includes('.');
@@ -74,10 +131,7 @@ export class FhirStructureNavigator {
       let result: EnrichedElementDefinition[];
 
       if (directChildren.length > 0) {
-        result = directChildren.map((el: ElementDefinition) => ({
-          ...el,
-          __fromDefinition: snapshotUrl
-        })) as EnrichedElementDefinition[];
+        result = directChildren.map(el => ({ ...el }));
         this.childrenCache.set(cacheKey, result); // ✅ Cache children
         return result;
       }
@@ -122,17 +176,20 @@ export class FhirStructureNavigator {
     const cached = this.elementCache.get(cacheKey);
     if (cached) return cached;
 
-    const snapshot = await this.fsg.getSnapshot(snapshotId, packageFilter);
-    const elements = snapshot.snapshot.element;
+    const snapshot = await this._getCachedSnapshot(snapshotId, packageFilter);
+    const elements = snapshot.snapshot.element as EnrichedElementDefinition[];
 
     if (pathSegments.length === 0) {
-      const root = { ...elements[0], __fromDefinition: snapshot.url };
+      const root = {
+        ...elements[0],
+        type: [{ code: snapshot.type, __kind: snapshot.kind }] as EnrichedElementDefinitionType[]
+      } as EnrichedElementDefinition;
       this.elementCache.set(cacheKey, root); // ✅ cache root
       return root;
     }
 
-    let currentElement: ElementDefinition | undefined = elements[0];
-    let previousElement: ElementDefinition | undefined;
+    let currentElement: EnrichedElementDefinition | undefined = elements[0];
+    let previousElement: EnrichedElementDefinition | undefined;
     let currentPath = elements[0].id;
     let currentBaseUrl = snapshot.url;
 
@@ -142,7 +199,7 @@ export class FhirStructureNavigator {
       const cached = this.elementCache.get(cacheKey);
       if (cached) {
         currentElement = cached;
-        currentPath = cached.path!;
+        currentPath = cached.id;
         currentBaseUrl = cached.__fromDefinition;
         continue;
       }
@@ -171,7 +228,7 @@ export class FhirStructureNavigator {
       }
 
       if (slice) {
-        const resolved = await this._resolveSlice(currentElement, slice, elements, currentBaseUrl, snapshot.__corePackage);
+        const resolved = await this._resolveSlice(currentElement, slice, elements, snapshot.__corePackage);
         if (resolved) {
         // If resolved came from a new profile (virtual slice), restart traversal in that snapshot
           if (resolved.__fromDefinition !== currentBaseUrl) {
@@ -180,16 +237,14 @@ export class FhirStructureNavigator {
           }
 
           currentElement = resolved;
-          currentPath = resolved.path!;
-          const enriched = { ...currentElement, __fromDefinition: currentBaseUrl } as EnrichedElementDefinition;
-          this.elementCache.set(cacheKey, enriched); // ✅ cache after resolving slice
+          currentPath = resolved.id;
+          this.elementCache.set(cacheKey, currentElement); // ✅ cache after resolving slice
           continue;
         }
       }
 
-      currentPath = currentElement.path!;
-      const enriched = { ...currentElement, __fromDefinition: currentBaseUrl } as EnrichedElementDefinition;
-      this.elementCache.set(cacheKey, enriched); // ✅ cache after resolving each segment
+      currentPath = currentElement.id;
+      this.elementCache.set(cacheKey, currentElement); // ✅ cache after resolving each segment
     }
 
     const finalKey = `${snapshotId}::${pathSegments.join('.')}`;
@@ -213,9 +268,9 @@ export class FhirStructureNavigator {
   }
 
   private _resolveElementPathWithPolymorphism(
-    elements: ElementDefinition[],
+    elements: EnrichedElementDefinition[],
     searchPath: string
-  ): { element?: ElementDefinition; narrowedType?: { code: string } } {
+  ): { element?: EnrichedElementDefinition; narrowedType?: EnrichedElementDefinitionType } {
     for (const el of elements) {
     // 1. Direct match
       if (el.id === searchPath || el.id === `${searchPath}[x]`) {
@@ -255,7 +310,7 @@ export class FhirStructureNavigator {
   }
 
   private async _attemptRebase(
-    previous: ElementDefinition | undefined,
+    previous: EnrichedElementDefinition | undefined,
     snapshot: any,
     remainingSegments: string[]
   ): Promise<EnrichedElementDefinition | undefined> {
@@ -278,17 +333,14 @@ export class FhirStructureNavigator {
   }
 
   private async _resolveSlice(
-    baseElement: ElementDefinition,
+    baseElement: EnrichedElementDefinition,
     slice: string,
-    elements: ElementDefinition[],
-    baseUrl: string,
+    elements: EnrichedElementDefinition[],
     corePackage: PackageIdentifier
   ): Promise<EnrichedElementDefinition | undefined> {
     const sliceId = `${baseElement.id}:${slice}`;
     const sliceMatch = elements.find(e => e.id === sliceId);
-    if (sliceMatch) {
-      return { ...sliceMatch, __fromDefinition: baseUrl };
-    }
+    if (sliceMatch) return sliceMatch;
 
     if (this._isPolymorphic(baseElement)) {
       const matchedType = baseElement.type?.find(t => t.code === slice);
@@ -296,8 +348,8 @@ export class FhirStructureNavigator {
         const inferredSliceId = `${baseElement.id}:${this._inferredSliceName(baseElement.id, matchedType.code)}`;
         const inferredSliceMatch = elements.find(e => e.id === inferredSliceId);
         return inferredSliceMatch
-          ? { ...inferredSliceMatch, __fromDefinition: baseUrl }
-          : { ...baseElement, type: [matchedType], __fromDefinition: baseUrl };
+          ? { ...inferredSliceMatch }
+          : { ...baseElement, type: [matchedType] };
       }
     }
     const allowedTypes = baseElement.type || [];
@@ -344,7 +396,7 @@ export class FhirStructureNavigator {
 
     // 2. Try resolving without package context
     try {
-      snapshot = await this.fsg.getSnapshot(id);
+      snapshot = await this._getCachedSnapshot(id);
     } catch {
       // ignore if not found
     }
