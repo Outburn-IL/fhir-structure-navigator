@@ -17,6 +17,7 @@ export class FhirStructureNavigator {
   // eslint-disable-next-line no-unused-vars
   private prethrow: (msg: Error | any) => Error;
   // private memory caches
+  private snapshotCache = new Map<string, any>(); // TODO: Define a more specific type for StructureDefinition
   private elementCache = new Map<string, EnrichedElementDefinition>();
   private childrenCache = new Map<string, EnrichedElementDefinition[]>();
   
@@ -33,6 +34,18 @@ export class FhirStructureNavigator {
 
   public getLogger(): ILogger {
     return this.logger;
+  }
+
+  private async _getCachedSnapshot(id: string, packageFilter?: PackageIdentifier): Promise<any> {
+    const pkgId = packageFilter?.id ?? '';
+    const pkgVer = packageFilter?.version ?? '';
+    const key = `${id}::${pkgId}::${pkgVer}`;
+    let snapshot = this.snapshotCache.get(key);
+    if (!snapshot) {
+      snapshot = await this.fsg.getSnapshot(id, packageFilter);
+      this.snapshotCache.set(key, snapshot);
+    }
+    return snapshot;
   }
 
   async getElement(
@@ -62,7 +75,7 @@ export class FhirStructureNavigator {
       const parentId = resolved.path!;
       const snapshotUrl = resolved.__fromDefinition;
 
-      const snapshot = await this.fsg.getSnapshot(snapshotId);
+      const snapshot = await this._getCachedSnapshot(snapshotId);
       const elements = snapshot.snapshot.element;
 
       const directChildren = elements.filter((el: ElementDefinition) => {
@@ -122,11 +135,15 @@ export class FhirStructureNavigator {
     const cached = this.elementCache.get(cacheKey);
     if (cached) return cached;
 
-    const snapshot = await this.fsg.getSnapshot(snapshotId, packageFilter);
+    const snapshot = await this._getCachedSnapshot(snapshotId, packageFilter);
     const elements = snapshot.snapshot.element;
 
     if (pathSegments.length === 0) {
-      const root = { ...elements[0], __fromDefinition: snapshot.url };
+      const root = {
+        ...elements[0],
+        __fromDefinition: snapshot.url,
+        type: [{ code: snapshot.type }] as ElementDefinitionType[]
+      } as EnrichedElementDefinition;
       this.elementCache.set(cacheKey, root); // ✅ cache root
       return root;
     }
@@ -142,7 +159,7 @@ export class FhirStructureNavigator {
       const cached = this.elementCache.get(cacheKey);
       if (cached) {
         currentElement = cached;
-        currentPath = cached.path!;
+        currentPath = cached.id;
         currentBaseUrl = cached.__fromDefinition;
         continue;
       }
@@ -344,7 +361,7 @@ export class FhirStructureNavigator {
 
     // 2. Try resolving without package context
     try {
-      snapshot = await this.fsg.getSnapshot(id);
+      snapshot = await this._getCachedSnapshot(id);
     } catch {
       // ignore if not found
     }
