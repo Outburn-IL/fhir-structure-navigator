@@ -21,12 +21,14 @@ describe('ElementFetcher', () => {
     const el = await fetcher.getElement('us-core-patient', 'gender');
     expect(el.path).toBe('Patient.gender');
     expect(el.__fromDefinition).toContain('StructureDefinition/us-core-patient');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a deep element path', async () => {
     const el = await fetcher.getElement('us-core-patient', 'identifier.assigner.identifier.assigner.display');
     expect(el.path).toBe('Reference.display');
     expect(el.__fromDefinition).toContain('StructureDefinition/Reference');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a polymorphic type using shortcut form (valueString)', async () => {
@@ -66,6 +68,7 @@ describe('ElementFetcher', () => {
     const el = await fetcher.getElement(profile, 'valueString');
     expect(el.id).toBe('Extension.value[x]:valueString');
     expect(el.__fromDefinition).toBe(profile);
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a polymorphic head when real slices exist on other types', async () => {
@@ -89,6 +92,7 @@ describe('ElementFetcher', () => {
     const el = await fetcher.getElement(profile, 'value[string]');
     expect(el.id).toBe('Extension.value[x]:valueString');
     expect(el.__fromDefinition).toBe(profile);
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a real polymorphic slice using long bracket syntax (value[valueString])', async () => {
@@ -96,6 +100,7 @@ describe('ElementFetcher', () => {
     const el = await fetcher.getElement(profile, 'value[valueString]');
     expect(el.id).toBe('Extension.value[x]:valueString');
     expect(el.__fromDefinition).toBe(profile);
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a polymorphic type using short bracket syntax (value[CodeableConcept])', async () => {
@@ -119,11 +124,18 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('CodeableConcept');
   });
 
-  it.skip('resolves a profile as virtual slice on polymorphic (value[SimpleQuantity])', async () => {
+  it('resolves a profile as virtual slice on polymorphic (value[SimpleQuantity])', async () => {
     const el = await fetcher.getElement('Observation', 'value[SimpleQuantity]');
-    expect(el.path).toBe('Observation.value[x]');
+    expect(el.path).toBe('Quantity');
     expect(el.type?.length).toBe(1);
     expect(el.type?.[0].code).toBe('Quantity');
+  });
+
+  it('resolves a child of a profile as virtual slice on polymorphic (value[SimpleQuantity].value)', async () => {
+    const el = await fetcher.getElement('Observation', 'value[SimpleQuantity].value');
+    expect(el.path).toBe('Quantity.value');
+    expect(el.type?.length).toBe(1);
+    expect(el.type?.[0].code).toBe('decimal');
   });
 
   it('resolves a child of polymorphic using shortcut form (valueQuantity.value)', async () => {
@@ -158,6 +170,7 @@ describe('ElementFetcher', () => {
     const el = await fetcher.getElement('us-core-patient', 'extension[race]');
     expect(el.id).toContain(':race');
     expect(el.path).toBe('Patient.extension');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a child of a slice of extension', async () => {
@@ -165,24 +178,28 @@ describe('ElementFetcher', () => {
     expect(el.path).toBe('Extension.url');
     expect(el.fixedUri).toBe('http://hl7.org/fhir/us/core/StructureDefinition/us-core-race');
     expect(el.__fromDefinition).toContain('StructureDefinition/us-core-race');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a rebased path (identifier.value.extension)', async () => {
     const el = await fetcher.getElement('us-core-patient', 'identifier.value.extension');
     expect(el.path).toBe('string.extension');
     expect(el.__fromDefinition).toContain('StructureDefinition/string');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a virtual slice as profile id', async () => {
     const el = await fetcher.getElement('Patient', 'extension[us-core-race]');
     expect(el.path).toBe('Extension');
     expect(el.__fromDefinition).toContain('StructureDefinition/us-core-race');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a virtual slice as profile url', async () => {
     const el = await fetcher.getElement('Patient', 'extension[http://hl7.org/fhir/us/core/StructureDefinition/us-core-race]');
     expect(el.path).toBe('Extension');
     expect(el.__fromDefinition).toContain('StructureDefinition/us-core-race');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a child of a virtual slice (profile id)', async () => {
@@ -190,6 +207,7 @@ describe('ElementFetcher', () => {
     expect(el.path).toBe('Extension.url');
     expect(el.__fromDefinition).toContain('StructureDefinition/us-core-race');
     expect(el.fixedUri).toBe('http://hl7.org/fhir/us/core/StructureDefinition/us-core-race');
+    expect(el.type?.length).toBe(1);
   });
 
   it('resolves a child of a virtual slice (profile url)', async () => {
@@ -197,6 +215,7 @@ describe('ElementFetcher', () => {
     expect(el.path).toBe('Extension.url');
     expect(el.__fromDefinition).toContain('StructureDefinition/us-core-race');
     expect(el.fixedUri).toBe('http://hl7.org/fhir/us/core/StructureDefinition/us-core-race');
+    expect(el.type?.length).toBe(1);
   });
 
   it('gets children of root', async () => {
