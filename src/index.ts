@@ -18,6 +18,19 @@ export interface EnrichedElementDefinition extends ElementDefinition {
   type?: EnrichedElementDefinitionType[];
 }
 
+const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter?: PackageIdentifier): string => {
+  if (typeof id === 'string') {
+    const pkgId = packageFilter?.id ?? '';
+    const pkgVer = packageFilter?.version ?? '';
+    return `${id}::${pkgId}::${pkgVer}`;
+  } else {
+    const pkgId = id?.__packageId ?? '';
+    const pkgVer = id?.__packageVersion ?? '';
+    const filename = id?.filename ?? '';
+    return `${pkgId}::${pkgVer}::${filename}`;
+  }
+};
+
 export class FhirStructureNavigator {
   private fsg: FhirSnapshotGenerator;
   private logger: ILogger;
@@ -53,17 +66,7 @@ export class FhirStructureNavigator {
   }
 
   private async _getCachedSnapshot(id: string | FileIndexEntryWithPkg, packageFilter?: PackageIdentifier): Promise<any> {
-    let key: string;
-    if (typeof id === 'string') {
-      const pkgId = packageFilter?.id ?? '';
-      const pkgVer = packageFilter?.version ?? '';
-      key = `${id}::${pkgId}::${pkgVer}`;
-    } else {
-      const pkgId = id?.__packageId ?? '';
-      const pkgVer = id?.__packageVersion ?? '';
-      const filename = id?.filename ?? '';
-      key = `${pkgId}::${pkgVer}::${filename}`;
-    }
+    const key: string = buildSnapshotCacheKey(id, packageFilter);
 
     let snapshot = this.snapshotCache.get(key);
     if (!snapshot) {
@@ -129,7 +132,7 @@ export class FhirStructureNavigator {
   ): Promise<EnrichedElementDefinition[]> {
     try {
       // Check children cache
-      let cacheKey = `${snapshotId}::${fshPath}`;
+      let cacheKey = `${buildSnapshotCacheKey(snapshotId)}::${fshPath}`;
       const cached = this.childrenCache.get(cacheKey);
       if (cached) return cached;
       const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
@@ -171,7 +174,8 @@ export class FhirStructureNavigator {
       // Rebase and continue under the base type
       const typeCode = resolved.type?.[0]?.code;
       if (typeCode) {
-        cacheKey = `${typeCode}::.`;
+        const typeMeta = await this.fsg.getMetadata(typeCode, snapshot.__corePackage);
+        cacheKey = `${buildSnapshotCacheKey(typeMeta)}::.`;
         const children = await this.getChildren(typeCode, '.');
         this.childrenCache.set(cacheKey, children);
         return children;
@@ -190,7 +194,7 @@ export class FhirStructureNavigator {
     pathSegments: string[],
     packageFilter?: PackageIdentifier
   ): Promise<EnrichedElementDefinition> {
-    let cacheKey = `${snapshotId}::${pathSegments.join('.')}`;
+    let cacheKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${pathSegments.join('.')}`;
     const cached = this.elementCache.get(cacheKey);
     if (cached) return cached;
 
@@ -213,7 +217,7 @@ export class FhirStructureNavigator {
 
     for (let i = 0; i < pathSegments.length; i++) {
       const subPath = pathSegments.slice(0, i + 1).join('.');
-      cacheKey = `${snapshotId}::${subPath}`;
+      cacheKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${subPath}`;
       const cached = this.elementCache.get(cacheKey);
       if (cached) {
         currentElement = cached;
@@ -242,7 +246,7 @@ export class FhirStructureNavigator {
       if (!currentElement) {
         const rebased = await this._attemptRebase(previousElement, snapshot, pathSegments.slice(i));
         if (rebased) return rebased;
-        throw new Error(`"${segment}" not found under "${previousElement?.path}" in structure "${snapshotId}"`);
+        throw new Error(`"${segment}" not found under "${previousElement?.path}" in structure "${typeof snapshotId === 'string' ? snapshotId : JSON.stringify(snapshotId, null, 2)}"`);
       }
 
       if (slice) {
@@ -265,7 +269,7 @@ export class FhirStructureNavigator {
       this.elementCache.set(cacheKey, currentElement); // ✅ cache after resolving each segment
     }
 
-    const finalKey = `${snapshotId}::${pathSegments.join('.')}`;
+    const finalKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${pathSegments.join('.')}`;
     return this.elementCache.get(finalKey)!; // ✅ guaranteed to be set during traversal
   }
 

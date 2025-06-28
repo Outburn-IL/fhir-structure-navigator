@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
 import { FhirStructureNavigator } from '@outburn/structure-navigator';
+import { FileIndexEntryWithPkg } from 'fhir-package-explorer';
 
 const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0'];
 
@@ -26,7 +27,11 @@ describe('ElementFetcher', () => {
   });
 
   it('resolves a deep element path', async () => {
-    const el = await fetcher.getElement('us-core-patient', 'identifier.assigner.identifier.assigner.display');
+    const el = await fetcher.getElement({
+      __packageId: 'hl7.fhir.us.core',
+      __packageVersion: '6.1.0',
+      'filename': 'StructureDefinition-us-core-patient.json'
+    } as FileIndexEntryWithPkg, 'identifier.assigner.identifier.assigner.display');
     expect(el.path).toBe('Reference.display');
     expect(el.__fromDefinition).toContain('StructureDefinition/Reference');
     expect(el.type?.length).toBe(1);
@@ -268,7 +273,11 @@ describe('ElementFetcher', () => {
   });
 
   it('gets children of a deep element path', async () => {
-    const children = await fetcher.getChildren('us-core-patient', 'identifier.assigner.identifier.assigner.display');
+    const children = await fetcher.getChildren({
+      __packageId: 'hl7.fhir.us.core',
+      __packageVersion: '6.1.0',
+      'filename': 'StructureDefinition-us-core-patient.json'
+    } as FileIndexEntryWithPkg, 'identifier.assigner.identifier.assigner.display');
     expect(children.some(c => c.path === 'string.extension')).toBe(true);
     children.forEach(c => {
       expect(c.type).toBeDefined();
@@ -280,7 +289,11 @@ describe('ElementFetcher', () => {
   });
 
   it('gets rebased children (e.g. identifier.value children from string)', async () => {
-    const children = await fetcher.getChildren('Patient', 'identifier.value');
+    const children = await fetcher.getChildren({
+      filename: 'StructureDefinition-Patient.json',
+      __packageId: 'hl7.fhir.r4.core',
+      __packageVersion: '4.0.1'
+    } as FileIndexEntryWithPkg, 'identifier.value');
     const childPaths = children.map(c => c.path);
     expect(childPaths).toContain('string.extension');
     expect(childPaths).toContain('string.id');
