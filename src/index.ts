@@ -82,6 +82,7 @@ export class FhirStructureNavigator {
           'isSummary',
           'isModifier',
           'requirements',
+          'representation',
           'comment',
           'definition',
           'isModifierReason',
