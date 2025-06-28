@@ -76,6 +76,7 @@ export class FhirStructureNavigator {
       for (const el of snapshot.snapshot.element as EnrichedElementDefinition[]) {
         el.__fromDefinition = defUrl;
         [
+          'alias',
           'mapping',
           'mustSupport',
           'isSummary',
