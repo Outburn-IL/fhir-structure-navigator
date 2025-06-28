@@ -82,6 +82,7 @@ export class FhirStructureNavigator {
           'isSummary',
           'isModifier',
           'requirements',
+          'representation',
           'comment',
           'definition',
           'isModifierReason',
@@ -90,6 +91,13 @@ export class FhirStructureNavigator {
           'short'
         ].map((attribute) => delete el[attribute]);
 
+        // Remove xpath from constraint array
+        if (Array.isArray(el.constraint)) {
+          for (const c of el.constraint) {
+            delete c.xpath;
+          }
+        }
+        
         if (el.type && Array.isArray(el.type)) {
           for (const t of el.type) {
             if (!t.code) continue;
@@ -119,10 +127,25 @@ export class FhirStructureNavigator {
                 // Lookup failed – skip
               }
             }
+          }
 
+          // Compute __name
+          const lastSegment = el.path.split('.').pop()!;
+          if (el.type.length === 1) {
+            const t = el.type[0];
+            if (lastSegment.endsWith('[x]')) {
+              const base = lastSegment.slice(0, -3);
+              el.__name = [`${base}${initCap(t.code!)}`];
+            } else {
+              el.__name = [lastSegment];
+            }
+          } else if (el.type.length > 1 && lastSegment.endsWith('[x]')) {
+            const base = lastSegment.slice(0, -3);
+            el.__name = el.type.map(t => `${base}${initCap(t.code!)}`);
           }
         }
       }
+
       this.snapshotCache.set(key, snapshot);
     }
     return snapshot;
