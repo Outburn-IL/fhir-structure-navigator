@@ -52,10 +52,19 @@ export class FhirStructureNavigator {
     return this.fsg.getFpe();
   }
 
-  private async _getCachedSnapshot(id: string, packageFilter?: PackageIdentifier): Promise<any> {
-    const pkgId = packageFilter?.id ?? '';
-    const pkgVer = packageFilter?.version ?? '';
-    const key = `${id}::${pkgId}::${pkgVer}`;
+  private async _getCachedSnapshot(id: string | FileIndexEntryWithPkg, packageFilter?: PackageIdentifier): Promise<any> {
+    let key: string;
+    if (typeof id === 'string') {
+      const pkgId = packageFilter?.id ?? '';
+      const pkgVer = packageFilter?.version ?? '';
+      key = `${id}::${pkgId}::${pkgVer}`;
+    } else {
+      const pkgId = id?.__packageId ?? '';
+      const pkgVer = id?.__packageVersion ?? '';
+      const filename = id?.filename ?? '';
+      key = `${pkgId}::${pkgVer}::${filename}`;
+    }
+
     let snapshot = this.snapshotCache.get(key);
     if (!snapshot) {
       snapshot = await this.fsg.getSnapshot(id, packageFilter);
@@ -102,8 +111,8 @@ export class FhirStructureNavigator {
     return snapshot;
   }
 
-  async getElement(
-    snapshotId: string,
+  public async getElement(
+    snapshotId: string | FileIndexEntryWithPkg,
     fshPath: string
   ): Promise<EnrichedElementDefinition> {
     try {
@@ -114,8 +123,8 @@ export class FhirStructureNavigator {
     }
   }
 
-  async getChildren(
-    snapshotId: string,
+  public async getChildren(
+    snapshotId: string | FileIndexEntryWithPkg,
     fshPath: string
   ): Promise<EnrichedElementDefinition[]> {
     try {
@@ -177,7 +186,7 @@ export class FhirStructureNavigator {
   }
 
   private async _resolvePath(
-    snapshotId: string,
+    snapshotId: string | FileIndexEntryWithPkg,
     pathSegments: string[],
     packageFilter?: PackageIdentifier
   ): Promise<EnrichedElementDefinition> {
@@ -310,7 +319,6 @@ export class FhirStructureNavigator {
 
     return { element: undefined };
   }
-
 
   private _inferredSliceName(elementId: string, typeCode: string): string {
     const lastSegment = elementId.split('.').pop() ?? '';
