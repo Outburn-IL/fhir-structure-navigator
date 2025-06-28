@@ -91,6 +91,13 @@ export class FhirStructureNavigator {
           'short'
         ].map((attribute) => delete el[attribute]);
 
+        // Remove xpath from constraint array
+        if (Array.isArray(el.constraint)) {
+          for (const c of el.constraint) {
+            delete c.xpath;
+          }
+        }
+        
         if (el.type && Array.isArray(el.type)) {
           for (const t of el.type) {
             if (!t.code) continue;
