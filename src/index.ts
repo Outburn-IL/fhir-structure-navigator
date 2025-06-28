@@ -73,8 +73,21 @@ export class FhirStructureNavigator {
       snapshot = await this.fsg.getSnapshot(id, packageFilter);
       const defUrl = snapshot.url;
       // Enrich each element
-      for (const el of snapshot.snapshot.element as ElementDefinition[]) {
-        (el as EnrichedElementDefinition).__fromDefinition = defUrl;
+      for (const el of snapshot.snapshot.element as EnrichedElementDefinition[]) {
+        el.__fromDefinition = defUrl;
+        [
+          'mapping',
+          'mustSupport',
+          'isSummary',
+          'isModifier',
+          'requirements',
+          'comment',
+          'definition',
+          'isModifierReason',
+          'meaningWhenMissing',
+          'example',
+          'short'
+        ].map((attribute) => delete el[attribute]);
 
         if (el.type && Array.isArray(el.type)) {
           for (const t of el.type) {
