@@ -7,6 +7,7 @@ import { FhirSnapshotGenerator, ElementDefinition, ILogger, PackageIdentifier } 
 import { customPrethrower, defaultLogger, defaultPrethrow, splitFshPath, initCap } from './utils';
 import { ElementDefinitionType } from 'fhir-snapshot-generator/dist/types';
 import { FileIndexEntryWithPkg } from 'fhir-package-explorer/dist/types';
+import { FhirPackageExplorer } from 'fhir-package-explorer';
 
 export interface EnrichedElementDefinitionType extends ElementDefinitionType {
   __kind?: string;
@@ -41,6 +42,14 @@ export class FhirStructureNavigator {
 
   public getLogger(): ILogger {
     return this.logger;
+  }
+
+  public getFsg(): FhirSnapshotGenerator {
+    return this.fsg;
+  }
+
+  public getFpe(): FhirPackageExplorer {
+    return this.fsg.getFpe();
   }
 
   private async _getCachedSnapshot(id: string, packageFilter?: PackageIdentifier): Promise<any> {
