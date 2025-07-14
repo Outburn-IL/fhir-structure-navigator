@@ -274,8 +274,12 @@ export class FhirStructureNavigator {
       currentElement = resolvedElement;
 
       if (currentElement && narrowedType) {
-        const narrowed = { ...currentElement, type: [narrowedType] };
-        const inferredSliceId = `${currentElement.id}:${this._inferredSliceName(currentElement.id, narrowedType.code)}`;
+        // If we found a polymorphic match, we need to narrow it down
+        // to the specific type we are looking for
+        // This also affects the __name array
+        const __name = this._inferredSliceName(currentElement.id, narrowedType.code);
+        const narrowed = { ...currentElement, type: [narrowedType], __name: [__name] } as EnrichedElementDefinition;
+        const inferredSliceId = `${currentElement.id}:${__name}`;
         const sliceMatch = elements.find(e => e.id === inferredSliceId);
         currentElement = sliceMatch || narrowed;
       }
