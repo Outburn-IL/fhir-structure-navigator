@@ -229,7 +229,8 @@ export class FhirStructureNavigator {
   private async _resolvePath(
     snapshotId: string | FileIndexEntryWithPkg,
     pathSegments: string[],
-    packageFilter?: PackageIdentifier
+    packageFilter?: PackageIdentifier,
+    cameFromElement?: EnrichedElementDefinition
   ): Promise<EnrichedElementDefinition> {
     let cacheKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${pathSegments.join('.')}`;
     const cached = this.elementCache.get(cacheKey);
@@ -241,8 +242,20 @@ export class FhirStructureNavigator {
     if (pathSegments.length === 0) {
       const root = {
         ...elements[0],
-        type: [{ code: snapshot.type, __kind: snapshot.kind }] as EnrichedElementDefinitionType[]
+        type: [{ code: snapshot.type, __kind: snapshot.kind }] as EnrichedElementDefinitionType[],
       } as EnrichedElementDefinition;
+      if (cameFromElement && cameFromElement.__name) {
+        // If we came from a specific element, inherit its __name
+        // but if the element we cme from is polymorphic, we need to filter the __name array according to our resolved type
+        if (cameFromElement.__name.length > 1) {
+          const __name = cameFromElement.__name.filter(name => {
+            return name.endWith(initCap(snapshot.type));
+          });
+          root.__name = __name;
+        } else {
+          root.__name = cameFromElement.__name;
+        }
+      }
       this.elementCache.set(cacheKey, root); // ✅ cache root
       return root;
     }
@@ -296,7 +309,7 @@ export class FhirStructureNavigator {
         // If resolved came from a new profile (virtual slice), restart traversal in that snapshot
           if (resolved.__fromDefinition !== currentBaseUrl) {
             const remaining = pathSegments.slice(i + 1);
-            return await this._resolvePath(resolved.__fromDefinition, remaining);
+            return await this._resolvePath(resolved.__fromDefinition, remaining, undefined, currentElement);
           }
 
           currentElement = resolved;
@@ -407,11 +420,12 @@ export class FhirStructureNavigator {
     if (this._isPolymorphic(baseElement)) {
       const matchedType = baseElement.type?.find(t => t.code === slice);
       if (matchedType) {
-        const inferredSliceId = `${baseElement.id}:${this._inferredSliceName(baseElement.id, matchedType.code)}`;
+        const inferredSliceName = this._inferredSliceName(baseElement.id, matchedType.code);
+        const inferredSliceId = `${baseElement.id}:${inferredSliceName}`;
         const inferredSliceMatch = elements.find(e => e.id === inferredSliceId);
         return inferredSliceMatch
           ? { ...inferredSliceMatch }
-          : { ...baseElement, type: [matchedType] };
+          : { ...baseElement, type: [matchedType], __name: [inferredSliceName] } as EnrichedElementDefinition;
       }
     }
     const allowedTypes = baseElement.type || [];
