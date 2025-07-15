@@ -246,7 +246,7 @@ export class FhirStructureNavigator {
       } as EnrichedElementDefinition;
       if (cameFromElement && cameFromElement.__name) {
         // If we came from a specific element, inherit its __name
-        // but if the element we cme from is polymorphic, we need to filter the __name array according to our resolved type
+        // but if the element we came from is polymorphic, we need to filter the __name array according to our resolved type
         if (cameFromElement.__name.length > 1) {
           const __name = cameFromElement.__name.filter((name: string) => {
             return name.endsWith(initCap(snapshot.type));
