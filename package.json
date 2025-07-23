@@ -1,6 +1,6 @@
 {
   "name": "@outburn/structure-navigator",
-  "version": "1.3.3",
+  "version": "1.4.0",
   "description": "Navigate and resolve FHIR element definitions using FSH-like paths",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -12,7 +12,9 @@
     "prepublishOnly": "npm run build",
     "dist-to-module": "npm run build && rimraf node_modules/@outburn && node test/dist-to-module.js",
     "pretest": "npm run dist-to-module",
-    "test": "vitest run"
+    "test": "vitest run",
+    "debug:build": "npm run dist-to-module && ncc build test/debug.ts --external fhir-snapshot-generator --no-cache --out test/dist/debug && node test/dist/debug/index.js",
+    "debug": "npm run debug:build && node test/dist/debug/index.js"
   },
   "keywords": [
     "fhir",
@@ -49,7 +51,7 @@
     "eslint": "^9.31.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^8.37.0",
+    "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4"
   }
 }
