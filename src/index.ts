@@ -213,12 +213,29 @@ export class FhirStructureNavigator {
         );
       }
 
-      // Rebase and continue under the base type
+      // Rebase and continue under the target snapshot.
+      // Target snapshot identifier is either the base type code, or a different profile 
+      // (when resolved.id is the same as the base type code)
+      // Explaination: when a resolved element's id is one of the base types (single path segement),
+      // it actually means we already got "out of scope" of the original snapshot and we are now at the root
+      // of a different snapshot. So, we must use the element's __fromDefinition for the rebase,
+      // since it may be a profile and not the base type.
       const typeCode = resolved.type?.[0]?.code;
       if (typeCode) {
-        const typeMeta = await this.fsg.getMetadata(typeCode, snapshot.__corePackage);
-        cacheKey = `${buildSnapshotCacheKey(typeMeta)}::.`;
-        const children = await this.getChildren(typeCode, '.');
+        let children: EnrichedElementDefinition[];
+        if (resolved.id === typeCode) {
+          // If the resolved element id is the same as the type code, we are at the root of a different snapshot
+          const profileMeta = await this.fsg.getMetadata(resolved.__fromDefinition, { id: resolved.__packageId, version: resolved.__packageVersion });
+          cacheKey = `${buildSnapshotCacheKey(profileMeta)}::.`;
+          children = await this.getChildren(resolved.__fromDefinition, '.');
+        } else {
+          // we are still in the original snapshot, we just got to an edge leaf (no children appear in snapshot).
+          // edges in a snapshot can only be references to base types,
+          // since profile references are always expanded and included in the snapshot
+          const typeMeta = await this.fsg.getMetadata(typeCode, snapshot.__corePackage);
+          cacheKey = `${buildSnapshotCacheKey(typeMeta)}::.`;
+          children = await this.getChildren(typeCode, '.');
+        }
         this.childrenCache.set(cacheKey, children);
         return children;
       }
