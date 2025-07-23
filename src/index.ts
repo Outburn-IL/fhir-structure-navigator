@@ -15,6 +15,9 @@ export interface EnrichedElementDefinitionType extends ElementDefinitionType {
 
 export interface EnrichedElementDefinition extends ElementDefinition {
   __fromDefinition: string;
+  __corePackage: PackageIdentifier,
+  __packageId: string,
+  __packageVersion: string,
   type?: EnrichedElementDefinitionType[];
 }
 
@@ -71,10 +74,12 @@ export class FhirStructureNavigator {
     let snapshot = this.snapshotCache.get(key);
     if (!snapshot) {
       snapshot = await this.fsg.getSnapshot(id, packageFilter);
-      const defUrl = snapshot.url;
       // Enrich each element
       for (const el of snapshot.snapshot.element as EnrichedElementDefinition[]) {
-        el.__fromDefinition = defUrl;
+        el.__fromDefinition = snapshot.url;
+        el.__corePackage = snapshot.__corePackage;
+        el.__packageId = snapshot.__packageId;
+        el.__packageVersion = snapshot.__packageVersion;
         [
           'alias',
           'mapping',
