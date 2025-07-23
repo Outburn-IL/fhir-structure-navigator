@@ -17,7 +17,7 @@ export interface EnrichedElementDefinition extends ElementDefinition {
   __fromDefinition: string;
   __corePackage: PackageIdentifier;
   __packageId: string,
-  __packageVersion: string,
+  __packageVersion: string;
   type?: EnrichedElementDefinitionType[];
 }
 
