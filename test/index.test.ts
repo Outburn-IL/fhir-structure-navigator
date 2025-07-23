@@ -3,7 +3,7 @@ import { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
 import { FhirStructureNavigator } from '@outburn/structure-navigator';
 import { FileIndexEntryWithPkg } from 'fhir-package-explorer';
 
-const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0'];
+const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0', 'il.core.fhir.r4#0.17.0'];
 
 let fetcher: FhirStructureNavigator;
 
@@ -151,7 +151,7 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('CodeableConcept');
   });
 
-  it.skip('resolves a profile as virtual slice on polymorphic (value[SimpleQuantity])', async () => {
+  it('resolves a profile as virtual slice on polymorphic (value[SimpleQuantity])', async () => {
     // This is currently skipped because currently the root element of the target profile is returned
     // and that might not be a desired behavior since the element definition is missing critical information
     // like __name (since the name of the element can only be inferred by a path of more than one segment)
@@ -347,5 +347,14 @@ describe('ElementFetcher', () => {
         expect(t.__kind).toBeDefined();
       });
     });
+  });
+
+  it('gets children of a virtual slice referencing an extension definition', async () => {
+    const children = await fetcher.getChildren('Patient', 'extension[ext-il-hmo]');
+    expect(children.some(c => c.id === 'Extension.url')).toBe(true);
+    // ensure the url element has the correct fixed value
+    const urlElement = children.find(c => c.id === 'Extension.url');
+    expect(urlElement?.fixedUri).toBe('http://fhir.health.gov.il/StructureDefinition/ext-il-hmo');
+    expect(urlElement?.__fromDefinition).toContain('StructureDefinition/ext-il-hmo');
   });
 });
