@@ -216,7 +216,7 @@ export class FhirStructureNavigator {
       // Rebase and continue under the target snapshot.
       // Target snapshot identifier is either the base type code, or a different profile 
       // (when resolved.id is the same as the base type code)
-      // Explaination: when a resolved element's id is one of the base types (single path segement),
+      // Explanation: when a resolved element's id is one of the base types (single path segment),
       // it actually means we already got "out of scope" of the original snapshot and we are now at the root
       // of a different snapshot. So, we must use the element's __fromDefinition for the rebase,
       // since it may be a profile and not the base type.
