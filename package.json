@@ -1,6 +1,6 @@
 {
   "name": "@outburn/structure-navigator",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Navigate and resolve FHIR element definitions using FSH-like paths",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -48,7 +48,7 @@
   "devDependencies": {
     "@eslint/js": "^9.24.0",
     "@vercel/ncc": "^0.38.3",
-    "eslint": "^9.31.0",
+    "eslint": "^9.32.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
