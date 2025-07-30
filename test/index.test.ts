@@ -357,4 +357,22 @@ describe('ElementFetcher', () => {
     expect(urlElement?.fixedUri).toBe('http://fhir.health.gov.il/StructureDefinition/ext-il-hmo');
     expect(urlElement?.__fromDefinition).toContain('StructureDefinition/ext-il-hmo');
   });
+
+  it('gets children of a virtual slice referencing an extension definition', async () => {
+    const children = await fetcher.getChildren('Patient', 'extension[HearingLossDisability]');
+    expect(children.some(c => c.id === 'Extension.url')).toBe(true);
+    // ensure the url element has the correct fixed value
+    const urlElement = children.find(c => c.id === 'Extension.url');
+    expect(urlElement?.fixedUri).toBe('http://hl7.org/fhir/StructureDefinition/patient-disability');
+    expect(urlElement?.__fromDefinition).toContain('StructureDefinition/ext-hearing-loss');
+  });
+
+  it('gets children of a child of a virtual slice referencing an extension definition', async () => {
+    const children = await fetcher.getChildren('Patient', 'extension[HearingLossDisability].value');
+    expect(children.some(c => c.id === 'Extension.value[x].coding')).toBe(true);
+    // ensure the url element has the correct fixed value
+    const urlElement = children.find(c => c.id === 'Extension.value[x].coding');
+    expect(urlElement?.min).toBe(1);
+    expect(urlElement?.__fromDefinition).toContain('StructureDefinition/ext-hearing-loss');
+  });
 });

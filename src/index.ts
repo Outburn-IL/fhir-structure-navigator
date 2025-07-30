@@ -182,7 +182,17 @@ export class FhirStructureNavigator {
       const resolved = await this._resolvePath(snapshotId, segments);
       const parentId = resolved.id;
 
-      const snapshot = await this._getCachedSnapshot(snapshotId);
+      // Use the snapshot from the resolved element if it's from a different profile
+      let actualSnapshotId = snapshotId;
+      if (resolved.__fromDefinition && resolved.__fromDefinition !== (typeof snapshotId === 'string' ? snapshotId : snapshotId.filename)) {
+        // If the resolved element is from a different profile, use that profile's snapshot
+        actualSnapshotId = resolved.__fromDefinition;
+        cacheKey = `${buildSnapshotCacheKey(actualSnapshotId)}::${fshPath}`;
+        const profileCached = this.childrenCache.get(cacheKey);
+        if (profileCached) return profileCached;
+      }
+
+      const snapshot = await this._getCachedSnapshot(actualSnapshotId);
       const elements = snapshot.snapshot.element as EnrichedElementDefinition[];
 
       const directChildren = elements.filter((el: EnrichedElementDefinition) => {
