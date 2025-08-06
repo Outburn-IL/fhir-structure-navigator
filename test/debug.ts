@@ -13,7 +13,9 @@ void async function () {
   });
   fetcher = new FhirStructureNavigator(fsg);
 
-  const children = await fetcher.getChildren('Patient', 'extension[HearingLossDisability].value');
-  console.log('Children of Patient.extension[HearingLossDisability].value:', children.map(c => ({ id: c.id, from: c.__fromDefinition, min: c.min })));
+  const root = 'Questionnaire';
+  const path = 'item.item.item.item.item';
+  const children = await fetcher.getChildren(root, path);
+  console.log(`Children of ${root}.${path}:`, children.map(c => ({ id: c.id, from: c.__fromDefinition, min: c.min })));
 
 }();
