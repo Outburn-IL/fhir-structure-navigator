@@ -274,6 +274,39 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].__kind).toBeDefined();
   });
 
+  it('resolves an element through contentReference (Bundle.entry.link.url)', async () => {
+    const el = await fetcher.getElement('Bundle', 'entry.link.url');
+    // Bundle.entry.link has contentReference="#Bundle.link", so this should resolve to Bundle.link.url
+    expect(el.path).toBe('Bundle.link.url');
+    expect(el.__fromDefinition).toContain('StructureDefinition/Bundle');
+    expect(el.type?.length).toBe(1);
+    expect(el.type?.[0].code).toBe('uri');
+    expect(el.__name).toEqual(['url']);
+    expect(el.type?.[0].__kind).toBeDefined();
+  });
+
+  it('resolves a deep element through contentReference (Bundle.entry.link.extension.url)', async () => {
+    const el = await fetcher.getElement('Bundle', 'entry.link.extension.url');
+    // This should resolve through contentReference and then traverse to extension.url
+    expect(el.path).toBe('Extension.url');
+    expect(el.__fromDefinition).toContain('StructureDefinition/Extension');
+    expect(el.type?.length).toBe(1);
+    expect(el.type?.[0].code).toBe('http://hl7.org/fhirpath/System.String');
+    expect(el.__name).toEqual(['url']);
+    expect(el.type?.[0].__kind).toBeDefined();
+  });
+
+  it('resolves an element through nested contentReference (Questionnaire.item.item.item.item.item.linkId)', async () => {
+    const el = await fetcher.getElement('Questionnaire', 'item.item.item.item.item.linkId');
+    // Questionnaire.item has contentReference="#Questionnaire.item", so deep nesting should work
+    expect(el.path).toBe('Questionnaire.item.linkId');
+    expect(el.__fromDefinition).toContain('StructureDefinition/Questionnaire');
+    expect(el.type?.length).toBe(1);
+    expect(el.type?.[0].code).toBe('string');
+    expect(el.__name).toEqual(['linkId']);
+    expect(el.type?.[0].__kind).toBeDefined();
+  });
+
   it('gets children of root', async () => {
     const children = await fetcher.getChildren('us-core-patient', '.');
     expect(children.some(c => c.path === 'Patient.identifier')).toBe(true);
@@ -374,5 +407,60 @@ describe('ElementFetcher', () => {
     const urlElement = children.find(c => c.id === 'Extension.value[x].coding');
     expect(urlElement?.min).toBe(1);
     expect(urlElement?.__fromDefinition).toContain('StructureDefinition/ext-hearing-loss');
+  });
+
+  it('gets children of an element with contentReference (Bundle.entry.link)', async () => {
+    const children = await fetcher.getChildren('Bundle', 'entry.link');
+    expect(children.length).toBeGreaterThan(0);
+    // Bundle.entry.link has contentReference="#Bundle.link", so children should be from Bundle.link
+    expect(children.some(c => c.path === 'Bundle.link.relation')).toBe(true);
+    expect(children.some(c => c.path === 'Bundle.link.url')).toBe(true);
+    children.forEach(c => {
+      expect(c.type).toBeDefined();
+      expect(c.__name).toBeDefined();
+      expect(c.__fromDefinition).toBeDefined();
+      c.type?.forEach(t => {
+        expect(t.__kind).toBeDefined();
+      });
+    });
+  });
+
+  it('gets children of a deep path through contentReference (Bundle.entry.link.extension)', async () => {
+    const children = await fetcher.getChildren('Bundle', 'entry.link.extension');
+    expect(children.length).toBeGreaterThan(0);
+    // This should resolve through contentReference and then get extension children
+    expect(children.some(c => c.path === 'Extension.url')).toBe(true);
+    expect(children.some(c => c.path === 'Extension.value[x]')).toBe(true);
+    children.forEach(c => {
+      expect(c.type).toBeDefined();
+      expect(c.__name).toBeDefined();
+      expect(c.__fromDefinition).toBeDefined();
+      c.type?.forEach(t => {
+        expect(t.__kind).toBeDefined();
+      });
+    });
+  });
+
+  it('gets children of nested contentReference elements (Questionnaire.item.item.item.item.item)', async () => {
+    const children = await fetcher.getChildren('Questionnaire', 'item.item.item.item.item');
+    expect(children.length).toBeGreaterThan(0);
+    
+    // Questionnaire.item has contentReference="#Questionnaire.item", so deep nesting should work
+    expect(children.some(c => c.path === 'Questionnaire.item.linkId')).toBe(true);
+    expect(children.some(c => c.path === 'Questionnaire.item.text')).toBe(true);
+    expect(children.some(c => c.path === 'Questionnaire.item.type')).toBe(true);
+    children.forEach(c => {
+      expect(c.__fromDefinition).toBeDefined();
+      // Elements with contentReference don't have type, so only check if type exists
+      if (c.type) {
+        c.type.forEach(t => {
+          expect(t.__kind).toBeDefined();
+        });
+      }
+      // __name is only computed for elements with types, so only check if present
+      if (c.__name) {
+        expect(c.__name).toBeDefined();
+      }
+    });
   });
 });

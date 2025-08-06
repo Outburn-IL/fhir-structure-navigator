@@ -213,7 +213,14 @@ export class FhirStructureNavigator {
       if (resolved.contentReference) {
         const refPath = resolved.contentReference.split('#')[1];
         const baseType = snapshot.type;
-        return await this.getChildren(baseType, refPath);
+        
+        // Remove the base type prefix from the reference path if present
+        // e.g., "#Bundle.link" should become "link" when baseType is "Bundle"
+        const cleanRefPath = refPath.startsWith(`${baseType}.`) 
+          ? refPath.substring(`${baseType}.`.length)
+          : refPath;
+        
+        return await this.getChildren(baseType, cleanRefPath);
       }
 
       // if more than one type, we can't resolve children, throw an error
@@ -423,8 +430,15 @@ export class FhirStructureNavigator {
   ): Promise<EnrichedElementDefinition | undefined> {
     if (previous?.contentReference) {
       const refPath = previous.contentReference.split('#')[1];
-      const rebasedPath = [...refPath.split('.'), ...remainingSegments];
-      return await this._resolvePath(snapshot.type, rebasedPath, snapshot.__corePackage);
+      const baseType = snapshot.type;
+      
+      // Remove the base type prefix from the reference path if present
+      const cleanRefPath = refPath.startsWith(`${baseType}.`) 
+        ? refPath.substring(`${baseType}.`.length)
+        : refPath;
+      
+      const rebasedPath = [...cleanRefPath.split('.'), ...remainingSegments];
+      return await this._resolvePath(baseType, rebasedPath, snapshot.__corePackage);
     }
 
     const type = previous?.type?.[0];
