@@ -148,10 +148,10 @@ export class FhirStructureNavigator {
             const base = lastSegment.slice(0, -3);
             el.__name = el.type.map(t => `${base}${initCap(t.code!)}`);
           }
-        } else {
-          // Handle elements without types (e.g., contentReference elements)
-          const lastSegment = el.path.split('.').pop()!;
-          el.__name = [lastSegment];
+        } else if (el.contentReference) {
+          // Handle contentReference elements - extract name from contentReference
+          const name = el.contentReference.split('.').pop()!;
+          el.__name = [name];
         }
       }
 
