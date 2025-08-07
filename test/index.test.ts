@@ -274,6 +274,24 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].__kind).toBeDefined();
   });
 
+  it('resolves an element with contentReference and ensures __name is set (Bundle.entry.link)', async () => {
+    const el = await fetcher.getElement('Bundle', 'entry.link');
+    // Bundle.entry.link has contentReference="#Bundle.link"
+    expect(el.contentReference).toBe('#Bundle.link');
+    expect(el.__fromDefinition).toContain('StructureDefinition/Bundle');
+    expect(el.__name).toEqual(['link']);
+    expect(el.__name).toBeDefined();
+  });
+
+  it('resolves an element with recursive contentReference and ensures __name is set (Questionnaire.item.item.item)', async () => {
+    const el = await fetcher.getElement('Questionnaire', 'item.item.item');
+    // Questionnaire.item has contentReference="#Questionnaire.item", so deep nesting should resolve properly
+    expect(el.contentReference).toBe('#Questionnaire.item');
+    expect(el.__fromDefinition).toContain('StructureDefinition/Questionnaire');
+    expect(el.__name).toEqual(['item']);
+    expect(el.__name).toBeDefined();
+  });
+
   it('resolves an element through contentReference (Bundle.entry.link.url)', async () => {
     const el = await fetcher.getElement('Bundle', 'entry.link.url');
     // Bundle.entry.link has contentReference="#Bundle.link", so this should resolve to Bundle.link.url
