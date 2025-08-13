@@ -481,4 +481,21 @@ describe('ElementFetcher', () => {
       }
     });
   });
+
+  it('gets children of a real slice referencing an extension profile (il-core-patient extension[hmo])', async () => {
+    const children = await fetcher.getChildren('il-core-patient', 'extension[hmo]');
+    expect(children.length).toBeGreaterThan(0);
+    const fromDefs = new Set(children.map(c => c.__fromDefinition));
+    expect(fromDefs.size).toBe(1);
+    expect(fromDefs.has('http://fhir.health.gov.il/StructureDefinition/ext-il-hmo')).toBe(true);
+    // ensure typical child elements exist
+    expect(children.some(c => c.id === 'Extension.url')).toBe(true);
+  });
+
+  it('gets element of slice child with fixedUri (il-core-patient extension[hmo].url)', async () => {
+    const el = await fetcher.getElement('il-core-patient', 'extension[hmo].url');
+    expect(el.__fromDefinition).toBe('http://fhir.health.gov.il/StructureDefinition/ext-il-hmo');
+    expect(el.fixedUri).toBe('http://fhir.health.gov.il/StructureDefinition/ext-il-hmo');
+    expect(el.path).toBe('Extension.url');
+  });
 });
