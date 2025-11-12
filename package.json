@@ -2,13 +2,22 @@
   "name": "@outburn/structure-navigator",
   "version": "1.5.0",
   "description": "Navigate and resolve FHIR element definitions using FSH-like paths",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
   "author": "Outburn Ltd.",
   "license": "Apache-2.0",
   "scripts": {
-    "build": "rimraf dist && ncc build src/index.ts --external fhir-snapshot-generator --minify --no-cache --out dist",
+    "build": "npm run clean && tsup",
+    "clean": "rimraf dist",
     "prepublishOnly": "npm run build",
     "dist-to-module": "npm run build && rimraf node_modules/@outburn && node test/dist-to-module.js",
     "pretest": "npm run dist-to-module",
@@ -50,6 +59,7 @@
     "@vercel/ncc": "^0.38.4",
     "eslint": "^9.39.1",
     "rimraf": "^6.1.0",
+    "tsup": "^8.5.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.4",
     "vitest": "^3.2.4"

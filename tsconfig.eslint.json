@@ -4,6 +4,7 @@
     "src/**/*.ts",
     "types/**/*.ts",
     "test",
+    "tsup.config.ts"
   ],
   "exclude": [
     "dist/**/*",
