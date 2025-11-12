@@ -3,11 +3,9 @@
  *   Project name: fhir-structure-navigator
  */
 
-import { FhirSnapshotGenerator, ElementDefinition, ILogger, PackageIdentifier } from 'fhir-snapshot-generator';
+import { FhirSnapshotGenerator, ElementDefinition, ILogger, PackageIdentifier, ElementDefinitionType } from 'fhir-snapshot-generator';
 import { customPrethrower, defaultLogger, defaultPrethrow, splitFshPath, initCap } from './utils';
-import { ElementDefinitionType } from 'fhir-snapshot-generator/dist/types';
-import { FileIndexEntryWithPkg } from 'fhir-package-explorer/dist/types';
-import { FhirPackageExplorer } from 'fhir-package-explorer';
+import { FileIndexEntryWithPkg, FhirPackageExplorer } from 'fhir-package-explorer';
 
 export interface EnrichedElementDefinitionType extends ElementDefinitionType {
   __kind?: string;
