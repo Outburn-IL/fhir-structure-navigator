@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "fhir-package-explorer": "^1.5.1",
-    "fhir-snapshot-generator": "^1.5.1"
+    "fhir-snapshot-generator": "^1.5.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
