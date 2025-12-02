@@ -417,11 +417,15 @@ export class FhirStructureNavigator {
         const aliasMatch = el.type?.find(t => `${basePath}${initCap(t.code)}` === searchPath);
         if (aliasMatch) return { element: el, narrowedType: aliasMatch };
 
-        // 2b. Bracket form: value[valueString], value[valueCodeableConcept]
+        // 2b. Bracket form: value[valueString], value[valueCodeableConcept], value[x]
         const bracketMatch = searchPath.match(/^(.+)\[([^\]]+)\]$/);
         if (bracketMatch) {
           const [, outer, inner] = bracketMatch;
           if (outer === basePath) {
+            // Special case: value[x] is equivalent to value for polymorphic elements
+            if (inner === 'x') {
+              return { element: el };
+            }
             const matchedType = el.type?.find(t => inner === `${outer}${initCap(t.code)}` || inner === initCap(t.code));
             if (matchedType) {
               return { element: el, narrowedType: matchedType };
@@ -481,6 +485,11 @@ export class FhirStructureNavigator {
     if (sliceMatch) return sliceMatch;
 
     if (this._isPolymorphic(baseElement)) {
+      // Special case: slice name 'x' on polymorphic elements means return the base element
+      if (slice === 'x') {
+        return { ...baseElement };
+      }
+      
       const matchedType = baseElement.type?.find(t => t.code === slice);
       if (matchedType) {
         const inferredSliceName = this._inferredSliceName(baseElement.id, matchedType.code);
