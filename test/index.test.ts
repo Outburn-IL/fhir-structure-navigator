@@ -56,6 +56,22 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].code).toBe('Quantity');
   });
 
+  it('resolves a polymorphic type using value[x] syntax', async () => {
+    const el = await fetcher.getElement('Extension', 'value[x]');
+    expect(el.path).toBe('Extension.value[x]');
+    expect(el.type?.length).toBeGreaterThan(1); // Should return all possible types
+    expect(el.__name).toBeDefined();
+    expect(el.type?.[0].__kind).toBeDefined();
+  });
+
+  it('resolves complex path with value[x] syntax (address.extension[language].value[x])', async () => {
+    const el = await fetcher.getElement('Patient', 'address.extension[language].value[x]');
+    expect(el.path).toBe('Extension.value[x]');
+    expect(el.type?.length).toBe(1); 
+    expect(el.__name).toBeDefined();
+    expect(el.type?.[0].__kind).toBeDefined();
+  });
+
   it('throws on polymorphic type mismatch using a base type as virtual slice (value[canonical])', async () => {
     await expect(
       fetcher.getElement('Observation', 'value[canonical]')
