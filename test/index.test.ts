@@ -67,7 +67,7 @@ describe('ElementFetcher', () => {
   it('resolves complex path with value[x] syntax (address.extension[language].value[x])', async () => {
     const el = await fetcher.getElement('Patient', 'address.extension[language].value[x]');
     expect(el.path).toBe('Extension.value[x]');
-    expect(el.type?.length).toBe(1); 
+    expect(el.type?.length).toBe(1); // language extension has a single type (code)
     expect(el.__name).toBeDefined();
     expect(el.type?.[0].__kind).toBeDefined();
   });

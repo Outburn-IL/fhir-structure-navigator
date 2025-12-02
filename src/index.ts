@@ -485,7 +485,7 @@ export class FhirStructureNavigator {
     if (sliceMatch) return sliceMatch;
 
     if (this._isPolymorphic(baseElement)) {
-      // Special case: slice name 'x' on polymorphic elements means return the base element  
+      // Special case: slice name 'x' on polymorphic elements means return the base element
       if (slice === 'x') {
         return { ...baseElement };
       }
