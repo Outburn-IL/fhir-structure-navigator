@@ -1,6 +1,6 @@
 {
   "name": "@outburn/structure-navigator",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "Navigate and resolve FHIR element definitions using FSH-like paths",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -51,8 +51,8 @@
     "url": "git+https://github.com/Outburn-IL/fhir-structure-navigator.git"
   },
   "dependencies": {
-    "fhir-package-explorer": "^1.5.1",
-    "fhir-snapshot-generator": "^1.6.0"
+    "fhir-package-explorer": "^1.6.0",
+    "fhir-snapshot-generator": "^1.7.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
