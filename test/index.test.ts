@@ -1,21 +1,25 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
 import { FhirStructureNavigator } from '@outburn/structure-navigator';
-import { FileIndexEntryWithPkg } from 'fhir-package-explorer';
+import { FhirPackageExplorer, FileIndexEntryWithPkg } from 'fhir-package-explorer';
 
 const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0', 'il.core.fhir.r4#0.17.0'];
 
 let fetcher: FhirStructureNavigator;
 
 beforeAll(async () => {
-  const fsg = await FhirSnapshotGenerator.create({
+  const fpe = await FhirPackageExplorer.create({
     context,
     cachePath: './test/.test-cache',
+    fhirVersion: '4.0.1'
+  });
+  const fsg = await FhirSnapshotGenerator.create({
     fhirVersion: '4.0.1',
-    cacheMode: 'lazy'
+    cacheMode: 'lazy',
+    fpe
   });
   fetcher = new FhirStructureNavigator(fsg);
-}, 300000); // 5 minutes timeout for setup
+}, 900000); // 15 minutes timeout for setup (first-run package downloads can be slow)
 
 describe('ElementFetcher', () => {
   it('resolves a normal element path', async () => {

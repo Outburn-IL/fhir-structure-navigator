@@ -1,4 +1,4 @@
-import { Logger } from '@outburn/types';
+import type { Logger } from '@outburn/types';
 
 export const initCap = (str: string): string => {
   return str.charAt(0).toUpperCase() + str.slice(1);

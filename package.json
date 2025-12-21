@@ -19,7 +19,7 @@
     "build": "npm run clean && tsup",
     "clean": "rimraf dist",
     "prepublishOnly": "npm run build",
-    "dist-to-module": "npm run build && rimraf node_modules/@outburn && node test/dist-to-module.js",
+    "dist-to-module": "npm run build && rimraf node_modules/@outburn/structure-navigator && node test/dist-to-module.js",
     "pretest": "npm run dist-to-module",
     "test": "vitest run",
     "debug:build": "npm run dist-to-module && ncc build test/debug.ts --external fhir-snapshot-generator --no-cache --out test/dist/debug && node test/dist/debug/index.js",
