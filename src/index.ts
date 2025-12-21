@@ -4,9 +4,9 @@
  */
 
 import type { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
-import type { Logger, FhirPackageIdentifier, ElementDefinition, ElementDefinitionType } from '@outburn/types';
+import type { Logger, FhirPackageIdentifier, ElementDefinition, ElementDefinitionType, FileIndexEntryWithPkg } from '@outburn/types';
 import { customPrethrower, defaultLogger, defaultPrethrow, splitFshPath, initCap } from './utils';
-import type { FileIndexEntryWithPkg, FhirPackageExplorer } from 'fhir-package-explorer';
+import type { FhirPackageExplorer } from 'fhir-package-explorer';
 
 export interface EnrichedElementDefinitionType extends ElementDefinitionType {
   __kind?: string;

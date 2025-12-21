@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
 import { FhirStructureNavigator } from '@outburn/structure-navigator';
-import { FhirPackageExplorer, FileIndexEntryWithPkg } from 'fhir-package-explorer';
+import { FhirPackageExplorer } from 'fhir-package-explorer';
+import { FileIndexEntryWithPkg } from '@outburn/types';
 
 const context = ['hl7.fhir.us.core@6.1.0', 'fsg.test.pkg@0.1.0', 'il.core.fhir.r4#0.17.0'];
 
