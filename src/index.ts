@@ -3,9 +3,10 @@
  *   Project name: fhir-structure-navigator
  */
 
-import { FhirSnapshotGenerator, ElementDefinition, ILogger, PackageIdentifier, ElementDefinitionType } from 'fhir-snapshot-generator';
+import type { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
+import type { Logger, FhirPackageIdentifier, ElementDefinition, ElementDefinitionType, FileIndexEntryWithPkg } from '@outburn/types';
 import { customPrethrower, defaultLogger, defaultPrethrow, splitFshPath, initCap } from './utils';
-import { FileIndexEntryWithPkg, FhirPackageExplorer } from 'fhir-package-explorer';
+import type { FhirPackageExplorer } from 'fhir-package-explorer';
 
 export interface EnrichedElementDefinitionType extends ElementDefinitionType {
   __kind?: string;
@@ -13,13 +14,14 @@ export interface EnrichedElementDefinitionType extends ElementDefinitionType {
 
 export interface EnrichedElementDefinition extends ElementDefinition {
   __fromDefinition: string;
-  __corePackage: PackageIdentifier;
+  __corePackage: FhirPackageIdentifier;
   __packageId: string,
   __packageVersion: string;
+  __name?: string[];
   type?: EnrichedElementDefinitionType[];
 }
 
-const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter?: PackageIdentifier): string => {
+const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter?: FhirPackageIdentifier): string => {
   if (typeof id === 'string') {
     const pkgId = packageFilter?.id ?? '';
     const pkgVer = packageFilter?.version ?? '';
@@ -34,7 +36,7 @@ const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter
 
 export class FhirStructureNavigator {
   private fsg: FhirSnapshotGenerator;
-  private logger: ILogger;
+  private logger: Logger;
   // eslint-disable-next-line no-unused-vars
   private prethrow: (msg: Error | any) => Error;
   // private memory caches
@@ -43,7 +45,7 @@ export class FhirStructureNavigator {
   private elementCache = new Map<string, EnrichedElementDefinition>();
   private childrenCache = new Map<string, EnrichedElementDefinition[]>();
   
-  constructor(fsg: FhirSnapshotGenerator, logger?: ILogger) {
+  constructor(fsg: FhirSnapshotGenerator, logger?: Logger) {
     this.fsg = fsg;
     if (logger) {
       this.logger = logger;
@@ -54,7 +56,7 @@ export class FhirStructureNavigator {
     }
   }
 
-  public getLogger(): ILogger {
+  public getLogger(): Logger {
     return this.logger;
   }
 
@@ -66,7 +68,7 @@ export class FhirStructureNavigator {
     return this.fsg.getFpe();
   }
 
-  private async _getCachedSnapshot(id: string | FileIndexEntryWithPkg, packageFilter?: PackageIdentifier): Promise<any> {
+  private async _getCachedSnapshot(id: string | FileIndexEntryWithPkg, packageFilter?: FhirPackageIdentifier): Promise<any> {
     const key: string = buildSnapshotCacheKey(id, packageFilter);
 
     let snapshot = this.snapshotCache.get(key);
@@ -285,7 +287,7 @@ export class FhirStructureNavigator {
   private async _resolvePath(
     snapshotId: string | FileIndexEntryWithPkg,
     pathSegments: string[],
-    packageFilter?: PackageIdentifier,
+    packageFilter?: FhirPackageIdentifier,
     cameFromElement?: EnrichedElementDefinition
   ): Promise<EnrichedElementDefinition> {
     let cacheKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${pathSegments.join('.')}`;
@@ -465,7 +467,7 @@ export class FhirStructureNavigator {
     const type = previous?.type?.[0];
     if (type) {
       const targetId = type.profile?.[0] || type.code;
-      const targetPackage: PackageIdentifier | undefined = type.profile?.[0]
+      const targetPackage: FhirPackageIdentifier | undefined = type.profile?.[0]
         ? { id: snapshot.__packageId, version: snapshot.__packageVersion }
         : snapshot.__corePackage;
       return await this._resolvePath(targetId, remainingSegments, targetPackage);
@@ -478,7 +480,7 @@ export class FhirStructureNavigator {
     baseElement: EnrichedElementDefinition,
     slice: string,
     elements: EnrichedElementDefinition[],
-    corePackage: PackageIdentifier
+    corePackage: FhirPackageIdentifier
   ): Promise<EnrichedElementDefinition | undefined> {
     const sliceId = `${baseElement.id}:${slice}`;
     const sliceMatch = elements.find(e => e.id === sliceId);
@@ -523,7 +525,7 @@ export class FhirStructureNavigator {
   private async _tryResolveSnapshot(
     id: string,
     allowedTypes: ElementDefinitionType[],
-    corePackage: PackageIdentifier
+    corePackage: FhirPackageIdentifier
   ): Promise<any> {
     const isAllowed = (snapshotType: string): boolean => allowedTypes.some(t => t.code === snapshotType);
     let snapshot: any;

@@ -1,4 +1,4 @@
-import { ILogger } from 'fhir-snapshot-generator';
+import type { Logger } from '@outburn/types';
 
 export const initCap = (str: string): string => {
   return str.charAt(0).toUpperCase() + str.slice(1);
@@ -25,7 +25,7 @@ export const splitFshPath = (path: string): string[] => {
   return segments;
 };
 
-export const defaultLogger: ILogger = {
+export const defaultLogger: Logger = {
   info: (msg: any) => console.log(msg),
   warn: (msg: any) => console.warn(msg),
   error: (msg: any) => console.error(msg)
@@ -39,7 +39,7 @@ export const defaultPrethrow = (msg: Error | any): Error => {
   return error;
 };
 
-export const customPrethrower = (logger: ILogger) => {
+export const customPrethrower = (logger: Logger) => {
   return (msg: Error | any): Error => {
     if (msg instanceof Error) {
       logger.error(msg);
