@@ -77,6 +77,12 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].__kind).toBeDefined();
   });
 
+  it('throws on missing path segment at the first invalid node (Patient.eyeColor.code.extension)', async () => {
+    await expect(
+      fetcher.getElement('Patient', 'eyeColor.code.extension')
+    ).rejects.toThrow(/"eyeColor" not found under "Patient"/i);
+  });
+
   it('throws on polymorphic type mismatch using a base type as virtual slice (value[canonical])', async () => {
     await expect(
       fetcher.getElement('Observation', 'value[canonical]')

@@ -5,7 +5,7 @@
 
 import type { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
 import type { Logger, FhirPackageIdentifier, ElementDefinition, ElementDefinitionType, FileIndexEntryWithPkg } from '@outburn/types';
-import { customPrethrower, defaultLogger, defaultPrethrow, splitFshPath, initCap } from './utils';
+import { splitFshPath, initCap } from './utils';
 import type { FhirPackageExplorer } from 'fhir-package-explorer';
 
 export interface EnrichedElementDefinitionType extends ElementDefinitionType {
@@ -37,8 +37,6 @@ const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter
 export class FhirStructureNavigator {
   private fsg: FhirSnapshotGenerator;
   private logger: Logger;
-  // eslint-disable-next-line no-unused-vars
-  private prethrow: (msg: Error | any) => Error;
   // private memory caches
   private snapshotCache = new Map<string, any>(); // TODO: Define a more specific type for StructureDefinition
   private typeMetaCache = new Map<string, FileIndexEntryWithPkg>();
@@ -47,13 +45,13 @@ export class FhirStructureNavigator {
   
   constructor(fsg: FhirSnapshotGenerator, logger?: Logger) {
     this.fsg = fsg;
-    if (logger) {
-      this.logger = logger;
-      this.prethrow = customPrethrower(this.logger);
-    } else {
-      this.logger = defaultLogger;
-      this.prethrow = defaultPrethrow;
-    }
+    this.logger = logger || {
+      // no-op logger
+      debug: () => {},
+      info: () => {},
+      warn: () => {},
+      error: () => {}
+    };
   }
 
   public getLogger(): Logger {
@@ -164,124 +162,116 @@ export class FhirStructureNavigator {
     snapshotId: string | FileIndexEntryWithPkg,
     fshPath: string
   ): Promise<EnrichedElementDefinition> {
-    try {
-      const segments = splitFshPath(fshPath);
-      return await this._resolvePath(snapshotId, segments);
-    } catch (error) {
-      throw this.prethrow(error);
-    }
+    const segments = splitFshPath(fshPath);
+    return await this._resolvePath(snapshotId, segments);
   }
 
   public async getChildren(
     snapshotId: string | FileIndexEntryWithPkg,
     fshPath: string
   ): Promise<EnrichedElementDefinition[]> {
-    try {
-      // Check children cache
-      let cacheKey = `${buildSnapshotCacheKey(snapshotId)}::${fshPath}`;
-      const cached = this.childrenCache.get(cacheKey);
-      if (cached) return cached;
-      const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
+    // Check children cache
+    let cacheKey = `${buildSnapshotCacheKey(snapshotId)}::${fshPath}`;
+    const cached = this.childrenCache.get(cacheKey);
+    if (cached) return cached;
+    const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
 
-      const resolved = await this._resolvePath(snapshotId, segments);
-      const parentId = resolved.id;
+    const resolved = await this._resolvePath(snapshotId, segments);
+    const parentId = resolved.id;
 
-      // Use the snapshot from the resolved element if it's from a different profile
-      let actualSnapshotId = snapshotId;
-      if (resolved.__fromDefinition && resolved.__fromDefinition !== (typeof snapshotId === 'string' ? snapshotId : snapshotId.filename)) {
-        // If the resolved element is from a different profile, use that profile's snapshot
-        actualSnapshotId = resolved.__fromDefinition;
-        cacheKey = `${buildSnapshotCacheKey(actualSnapshotId)}::${fshPath}`;
-        const profileCached = this.childrenCache.get(cacheKey);
-        if (profileCached) return profileCached;
-      }
-
-      const snapshot = await this._getCachedSnapshot(actualSnapshotId);
-      const elements = snapshot.snapshot.element as EnrichedElementDefinition[];
-
-      const directChildren = elements.filter((el: EnrichedElementDefinition) => {
-        if (!el.id?.startsWith(`${parentId}.`)) return false;
-        const remainder = el.id.slice(parentId.length + 1);
-        return remainder.length > 0 && !remainder.includes('.');
-      });
-
-      let result: EnrichedElementDefinition[];
-
-      if (directChildren.length > 0) {
-        result = directChildren.map(el => ({ ...el }));
-        this.childrenCache.set(cacheKey, result); // ✅ Cache children
-        return result;
-      }
-
-      // Check for contentReference
-      if (resolved.contentReference) {
-        const refPath = resolved.contentReference.split('#')[1];
-        const baseType = snapshot.type;
-        
-        // Remove the base type prefix from the reference path if present
-        // e.g., "#Bundle.link" should become "link" when baseType is "Bundle"
-        const cleanRefPath = refPath.startsWith(`${baseType}.`) 
-          ? refPath.substring(`${baseType}.`.length)
-          : refPath;
-        
-        return await this.getChildren(baseType, cleanRefPath);
-      }
-
-      // if more than one type, we can't resolve children, throw an error
-      if (resolved.type && resolved.type.length > 1) {
-        throw new Error(
-          `Cannot resolve children for choice type element ${resolved.path}.`
-        );
-      }
-
-      // Rebase and continue under the target snapshot.
-      // Prefer a profiled type (element.type.profile[0]) when available over the base type code.
-      const typeInfo = resolved.type?.[0];
-      if (typeInfo) {
-        // Determine target snapshot id: use first profile canonical if present, otherwise base code
-        let targetId = typeInfo.code;
-        let isProfile = false;
-        if (typeInfo.profile?.length) {
-          // Extract simple id from canonical (last path segment before |version if present)
-          const canonical = typeInfo.profile[0];
-          const simpleId = canonical.split('/').pop()?.split('|')[0];
-          if (simpleId) {
-            targetId = simpleId;
-            isProfile = true;
-          } else {
-            targetId = canonical; // fallback
-            isProfile = true;
-          }
-        }
-
-        let children: EnrichedElementDefinition[];
-        if (resolved.id === targetId) {
-          // we are at the root of the (profile) snapshot already
-          const profileMeta = await this.fsg.getMetadata(resolved.__fromDefinition, { id: resolved.__packageId, version: resolved.__packageVersion });
-          cacheKey = `${buildSnapshotCacheKey(profileMeta)}::.`;
-          children = await this.getChildren(resolved.__fromDefinition, '.');
-        } else {
-          if (isProfile) {
-            // Directly fetch children from the profile snapshot root
-            cacheKey = `${buildSnapshotCacheKey(targetId)}::.`;
-            children = await this.getChildren(targetId, '.');
-          } else {
-            // Base type path (previous logic)
-            const typeMeta = await this.fsg.getMetadata(targetId, snapshot.__corePackage);
-            cacheKey = `${buildSnapshotCacheKey(typeMeta)}::.`;
-            children = await this.getChildren(targetId, '.');
-          }
-        }
-        this.childrenCache.set(cacheKey, children);
-        return children;
-      }
-
-      result = []; // No children found
-      this.childrenCache.set(cacheKey, result); // ✅ Cache empty result
-      return result;
-    } catch (error) {
-      throw this.prethrow(error);
+    // Use the snapshot from the resolved element if it's from a different profile
+    let actualSnapshotId = snapshotId;
+    if (resolved.__fromDefinition && resolved.__fromDefinition !== (typeof snapshotId === 'string' ? snapshotId : snapshotId.filename)) {
+      // If the resolved element is from a different profile, use that profile's snapshot
+      actualSnapshotId = resolved.__fromDefinition;
+      cacheKey = `${buildSnapshotCacheKey(actualSnapshotId)}::${fshPath}`;
+      const profileCached = this.childrenCache.get(cacheKey);
+      if (profileCached) return profileCached;
     }
+
+    const snapshot = await this._getCachedSnapshot(actualSnapshotId);
+    const elements = snapshot.snapshot.element as EnrichedElementDefinition[];
+
+    const directChildren = elements.filter((el: EnrichedElementDefinition) => {
+      if (!el.id?.startsWith(`${parentId}.`)) return false;
+      const remainder = el.id.slice(parentId.length + 1);
+      return remainder.length > 0 && !remainder.includes('.');
+    });
+
+    let result: EnrichedElementDefinition[];
+
+    if (directChildren.length > 0) {
+      result = directChildren.map(el => ({ ...el }));
+      this.childrenCache.set(cacheKey, result); // ✅ Cache children
+      return result;
+    }
+
+    // Check for contentReference
+    if (resolved.contentReference) {
+      const refPath = resolved.contentReference.split('#')[1];
+      const baseType = snapshot.type;
+      
+      // Remove the base type prefix from the reference path if present
+      // e.g., "#Bundle.link" should become "link" when baseType is "Bundle"
+      const cleanRefPath = refPath.startsWith(`${baseType}.`) 
+        ? refPath.substring(`${baseType}.`.length)
+        : refPath;
+      
+      return await this.getChildren(baseType, cleanRefPath);
+    }
+
+    // if more than one type, we can't resolve children, throw an error
+    if (resolved.type && resolved.type.length > 1) {
+      throw new Error(
+        `Cannot resolve children for choice type element ${resolved.path}.`
+      );
+    }
+
+    // Rebase and continue under the target snapshot.
+    // Prefer a profiled type (element.type.profile[0]) when available over the base type code.
+    const typeInfo = resolved.type?.[0];
+    if (typeInfo) {
+      // Determine target snapshot id: use first profile canonical if present, otherwise base code
+      let targetId = typeInfo.code;
+      let isProfile = false;
+      if (typeInfo.profile?.length) {
+        // Extract simple id from canonical (last path segment before |version if present)
+        const canonical = typeInfo.profile[0];
+        const simpleId = canonical.split('/').pop()?.split('|')[0];
+        if (simpleId) {
+          targetId = simpleId;
+          isProfile = true;
+        } else {
+          targetId = canonical; // fallback
+          isProfile = true;
+        }
+      }
+
+      let children: EnrichedElementDefinition[];
+      if (resolved.id === targetId) {
+        // we are at the root of the (profile) snapshot already
+        const profileMeta = await this.fsg.getMetadata(resolved.__fromDefinition, { id: resolved.__packageId, version: resolved.__packageVersion });
+        cacheKey = `${buildSnapshotCacheKey(profileMeta)}::.`;
+        children = await this.getChildren(resolved.__fromDefinition, '.');
+      } else {
+        if (isProfile) {
+          // Directly fetch children from the profile snapshot root
+          cacheKey = `${buildSnapshotCacheKey(targetId)}::.`;
+          children = await this.getChildren(targetId, '.');
+        } else {
+          // Base type path (previous logic)
+          const typeMeta = await this.fsg.getMetadata(targetId, snapshot.__corePackage);
+          cacheKey = `${buildSnapshotCacheKey(typeMeta)}::.`;
+          children = await this.getChildren(targetId, '.');
+        }
+      }
+      this.childrenCache.set(cacheKey, children);
+      return children;
+    }
+
+    result = []; // No children found
+    this.childrenCache.set(cacheKey, result); // ✅ Cache empty result
+    return result;
   }
 
   private async _resolvePath(
