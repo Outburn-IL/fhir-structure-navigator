@@ -176,7 +176,7 @@ export interface NavigatorCacheOptions {
 
 /**
  * Build array-based cache key for snapshot cache
- * Format: [id, packageId, packageVersion]
+ * Format: [normalizedSnapshotId, packageId, packageVersion]
  */
 const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter?: FhirPackageIdentifier): (string | number)[] => {
   if (typeof id === 'string') {
@@ -187,7 +187,8 @@ const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter
     const pkgId = id?.__packageId ?? '';
     const pkgVer = id?.__packageVersion ?? '';
     const filename = id?.filename ?? '';
-    return [pkgId, pkgVer, filename];
+    const normalizedId = `${pkgId}::${pkgVer}::${filename}`;
+    return [normalizedId, '', ''];
   }
 };
 
@@ -201,7 +202,7 @@ const buildTypeMetaCacheKey = (typeCode: string, corePackage: FhirPackageIdentif
 
 /**
  * Build array-based cache key for element cache (includes package context namespace)
- * Format: [packageContext, snapshotId, packageId, packageVersion, pathSegments]
+ * Format: [packageContext, normalizedSnapshotId, pathSegments]
  */
 const buildElementCacheKey = (
   packageContext: string,
@@ -209,21 +210,25 @@ const buildElementCacheKey = (
   pathSegments: string,
   packageFilter?: FhirPackageIdentifier
 ): (string | number)[] => {
+  // Use packageFilter if provided, otherwise use packageContext
+  const contextKey = packageFilter 
+    ? JSON.stringify([{ id: packageFilter.id, version: packageFilter.version ?? '' }])
+    : packageContext;
+  
   if (typeof snapshotId === 'string') {
-    const pkgId = packageFilter?.id ?? '';
-    const pkgVer = packageFilter?.version ?? '';
-    return [packageContext, snapshotId, pkgId, pkgVer, pathSegments];
+    return [contextKey, snapshotId, pathSegments];
   } else {
     const pkgId = snapshotId?.__packageId ?? '';
     const pkgVer = snapshotId?.__packageVersion ?? '';
     const filename = snapshotId?.filename ?? '';
-    return [packageContext, pkgId, pkgVer, filename, pathSegments];
+    const normalizedId = `${pkgId}::${pkgVer}::${filename}`;
+    return [contextKey, normalizedId, pathSegments];
   }
 };
 
 /**
  * Build array-based cache key for children cache (includes package context namespace)
- * Format: [packageContext, snapshotId, packageId, packageVersion, fshPath]
+ * Format: [packageContext, normalizedSnapshotId, fshPath]
  */
 const buildChildrenCacheKey = (
   packageContext: string,
@@ -231,12 +236,13 @@ const buildChildrenCacheKey = (
   fshPath: string
 ): (string | number)[] => {
   if (typeof snapshotId === 'string') {
-    return [packageContext, snapshotId, '', '', fshPath];
+    return [packageContext, snapshotId, fshPath];
   } else {
     const pkgId = snapshotId?.__packageId ?? '';
     const pkgVer = snapshotId?.__packageVersion ?? '';
     const filename = snapshotId?.filename ?? '';
-    return [packageContext, pkgId, pkgVer, filename, fshPath];
+    const normalizedId = `${pkgId}::${pkgVer}::${filename}`;
+    return [packageContext, normalizedId, fshPath];
   }
 };
 
