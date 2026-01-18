@@ -77,11 +77,15 @@ class TwoTierCache<T extends {}> implements ICache<T> {
 
     // Check external cache
     if (this.external) {
-      const externalValue = await this.external.get(key);
-      if (externalValue !== undefined) {
-        // Promote to LRU
-        this.lru.set(key, externalValue);
-        return externalValue;
+      try {
+        const externalValue = await this.external.get(key);
+        if (externalValue !== undefined) {
+          // Promote to LRU
+          this.lru.set(key, externalValue);
+          return externalValue;
+        }
+      } catch {
+        // External cache error - continue with LRU-only operation
       }
     }
 
@@ -94,7 +98,11 @@ class TwoTierCache<T extends {}> implements ICache<T> {
     
     // Set in external if available
     if (this.external) {
-      await this.external.set(key, value);
+      try {
+        await this.external.set(key, value);
+      } catch {
+        // External cache error - continue (LRU is already set)
+      }
     }
   }
 
@@ -103,21 +111,38 @@ class TwoTierCache<T extends {}> implements ICache<T> {
       return true;
     }
     if (this.external) {
-      return await this.external.has(key);
+      try {
+        return await this.external.has(key);
+      } catch {
+        // External cache error - fall back to LRU result
+        return false;
+      }
     }
     return false;
   }
 
   async delete(key: (string | number)[]): Promise<boolean> {
     const lruDeleted = this.lru.delete(key);
-    const externalDeleted = this.external ? await this.external.delete(key) : false;
-    return lruDeleted || externalDeleted;
+    if (this.external) {
+      try {
+        const externalDeleted = await this.external.delete(key);
+        return lruDeleted || externalDeleted;
+      } catch {
+        // External cache error - return LRU result only
+        return lruDeleted;
+      }
+    }
+    return lruDeleted;
   }
 
   async clear(): Promise<void> {
     this.lru.clear();
     if (this.external) {
-      await this.external.clear();
+      try {
+        await this.external.clear();
+      } catch {
+        // External cache error - continue (LRU is already cleared)
+      }
     }
   }
 }
