@@ -142,13 +142,6 @@ export interface NavigatorCacheOptions {
   childrenCache?: ICache<EnrichedElementDefinition[]>;
 }
 
-export interface NavigatorCacheOptions {
-  snapshotCache?: ICache<any>;
-  typeMetaCache?: ICache<FileIndexEntryWithPkg>;
-  elementCache?: ICache<EnrichedElementDefinition>;
-  childrenCache?: ICache<EnrichedElementDefinition[]>;
-}
-
 /**
  * Build array-based cache key for snapshot cache
  * Format: [normalizedSnapshotId, packageId, packageVersion]
