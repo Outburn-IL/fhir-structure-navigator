@@ -5,7 +5,7 @@ import { defineConfig } from 'eslint/config';
 
 export default defineConfig([
   {
-    ignores: ['node_modules/**', 'dist/**', 'test/.test-cache/**', 'test/wip/**', 'eslint.config.js', 'vitest.config.ts'],
+    ignores: ['node_modules/**', 'dist/**', 'test/.test-cache/**', 'test/wip/**', 'examples/**', 'eslint.config.js', 'vitest.config.ts'],
   },
   {
     files: ['**/*.{js,mjs,cjs,ts}'],
@@ -26,7 +26,8 @@ export default defineConfig([
       indent: ['error', 2],
       semi: ['error', 'always'],
       quotes: ['error', 'single'],
-      'no-unused-vars': ['warn'],
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', { 'argsIgnorePattern': '^_' }],
       'no-console': 'off',
       '@typescript-eslint/no-explicit-any': 'off'
     }
