@@ -7,6 +7,7 @@ import type { FhirSnapshotGenerator } from 'fhir-snapshot-generator';
 import type { Logger, FhirPackageIdentifier, ElementDefinition, ElementDefinitionType, FileIndexEntryWithPkg } from '@outburn/types';
 import { splitFshPath, initCap } from './utils';
 import type { FhirPackageExplorer } from 'fhir-package-explorer';
+import { LRUCache as LRU } from 'lru-cache';
 
 /**
  * Generic cache interface supporting array-based keys for LMDB compatibility
@@ -21,13 +22,13 @@ export interface ICache<T> {
 
 /**
  * LRU Cache implementation as inner super-hot layer
+ * Uses lru-cache library for O(1) eviction performance
  */
-class LRUCache<T> implements ICache<T> {
-  private cache = new Map<string, { value: T; timestamp: number }>();
-  private maxSize: number;
+class LRUCache<T extends {}> implements ICache<T> {
+  private cache: LRU<string, T, unknown>;
 
   constructor(maxSize: number) {
-    this.maxSize = maxSize;
+    this.cache = new LRU<string, T, unknown>({ max: maxSize });
   }
 
   private serializeKey(key: (string | number)[]): string {
@@ -35,37 +36,11 @@ class LRUCache<T> implements ICache<T> {
   }
 
   get(key: (string | number)[]): T | undefined {
-    const serialized = this.serializeKey(key);
-    const entry = this.cache.get(serialized);
-    if (entry) {
-      // Update timestamp for LRU
-      entry.timestamp = Date.now();
-      return entry.value;
-    }
-    return undefined;
+    return this.cache.get(this.serializeKey(key));
   }
 
   set(key: (string | number)[], value: T): void {
-    const serialized = this.serializeKey(key);
-    
-    // If at capacity and key doesn't exist, evict oldest
-    if (this.cache.size >= this.maxSize && !this.cache.has(serialized)) {
-      let oldestKey: string | undefined;
-      let oldestTime = Infinity;
-      
-      for (const [k, entry] of this.cache.entries()) {
-        if (entry.timestamp < oldestTime) {
-          oldestTime = entry.timestamp;
-          oldestKey = k;
-        }
-      }
-      
-      if (oldestKey) {
-        this.cache.delete(oldestKey);
-      }
-    }
-    
-    this.cache.set(serialized, { value, timestamp: Date.now() });
+    this.cache.set(this.serializeKey(key), value);
   }
 
   has(key: (string | number)[]): boolean {
@@ -84,7 +59,7 @@ class LRUCache<T> implements ICache<T> {
 /**
  * Two-tier cache combining fast LRU with optional external cache
  */
-class TwoTierCache<T> implements ICache<T> {
+class TwoTierCache<T extends {}> implements ICache<T> {
   private lru: LRUCache<T>;
   private external?: ICache<T>;
 
