@@ -8,6 +8,145 @@ import type { Logger, FhirPackageIdentifier, ElementDefinition, ElementDefinitio
 import { splitFshPath, initCap } from './utils';
 import type { FhirPackageExplorer } from 'fhir-package-explorer';
 
+/**
+ * Generic cache interface supporting array-based keys for LMDB compatibility
+ */
+export interface ICache<T> {
+  get(key: (string | number)[]): Promise<T | undefined> | T | undefined;
+  set(key: (string | number)[], value: T): Promise<void> | void;
+  has(key: (string | number)[]): Promise<boolean> | boolean;
+  delete(key: (string | number)[]): Promise<boolean> | boolean;
+  clear(): Promise<void> | void;
+}
+
+/**
+ * LRU Cache implementation as inner super-hot layer
+ */
+class LRUCache<T> implements ICache<T> {
+  private cache = new Map<string, { value: T; timestamp: number }>();
+  private maxSize: number;
+
+  constructor(maxSize: number) {
+    this.maxSize = maxSize;
+  }
+
+  private serializeKey(key: (string | number)[]): string {
+    return JSON.stringify(key);
+  }
+
+  get(key: (string | number)[]): T | undefined {
+    const serialized = this.serializeKey(key);
+    const entry = this.cache.get(serialized);
+    if (entry) {
+      // Update timestamp for LRU
+      entry.timestamp = Date.now();
+      return entry.value;
+    }
+    return undefined;
+  }
+
+  set(key: (string | number)[], value: T): void {
+    const serialized = this.serializeKey(key);
+    
+    // If at capacity and key doesn't exist, evict oldest
+    if (this.cache.size >= this.maxSize && !this.cache.has(serialized)) {
+      let oldestKey: string | undefined;
+      let oldestTime = Infinity;
+      
+      for (const [k, entry] of this.cache.entries()) {
+        if (entry.timestamp < oldestTime) {
+          oldestTime = entry.timestamp;
+          oldestKey = k;
+        }
+      }
+      
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
+      }
+    }
+    
+    this.cache.set(serialized, { value, timestamp: Date.now() });
+  }
+
+  has(key: (string | number)[]): boolean {
+    return this.cache.has(this.serializeKey(key));
+  }
+
+  delete(key: (string | number)[]): boolean {
+    return this.cache.delete(this.serializeKey(key));
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+}
+
+/**
+ * Two-tier cache combining fast LRU with optional external cache
+ */
+class TwoTierCache<T> implements ICache<T> {
+  private lru: LRUCache<T>;
+  private external?: ICache<T>;
+
+  constructor(lruSize: number, external?: ICache<T>) {
+    this.lru = new LRUCache(lruSize);
+    this.external = external;
+  }
+
+  async get(key: (string | number)[]): Promise<T | undefined> {
+    // Check LRU first
+    const lruValue = this.lru.get(key);
+    if (lruValue !== undefined) {
+      return lruValue;
+    }
+
+    // Check external cache
+    if (this.external) {
+      const externalValue = await this.external.get(key);
+      if (externalValue !== undefined) {
+        // Promote to LRU
+        this.lru.set(key, externalValue);
+        return externalValue;
+      }
+    }
+
+    return undefined;
+  }
+
+  async set(key: (string | number)[], value: T): Promise<void> {
+    // Always set in LRU
+    this.lru.set(key, value);
+    
+    // Set in external if available
+    if (this.external) {
+      await this.external.set(key, value);
+    }
+  }
+
+  async has(key: (string | number)[]): Promise<boolean> {
+    if (this.lru.has(key)) {
+      return true;
+    }
+    if (this.external) {
+      return await this.external.has(key);
+    }
+    return false;
+  }
+
+  async delete(key: (string | number)[]): Promise<boolean> {
+    const lruDeleted = this.lru.delete(key);
+    const externalDeleted = this.external ? await this.external.delete(key) : false;
+    return lruDeleted || externalDeleted;
+  }
+
+  async clear(): Promise<void> {
+    this.lru.clear();
+    if (this.external) {
+      await this.external.clear();
+    }
+  }
+}
+
 export interface EnrichedElementDefinitionType extends ElementDefinitionType {
   __kind?: string;
 }
@@ -21,29 +160,98 @@ export interface EnrichedElementDefinition extends ElementDefinition {
   type?: EnrichedElementDefinitionType[];
 }
 
-const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter?: FhirPackageIdentifier): string => {
+export interface NavigatorCacheOptions {
+  snapshotCache?: ICache<any>;
+  typeMetaCache?: ICache<FileIndexEntryWithPkg>;
+  elementCache?: ICache<EnrichedElementDefinition>;
+  childrenCache?: ICache<EnrichedElementDefinition[]>;
+}
+
+export interface NavigatorCacheOptions {
+  snapshotCache?: ICache<any>;
+  typeMetaCache?: ICache<FileIndexEntryWithPkg>;
+  elementCache?: ICache<EnrichedElementDefinition>;
+  childrenCache?: ICache<EnrichedElementDefinition[]>;
+}
+
+/**
+ * Build array-based cache key for snapshot cache
+ * Format: [id, packageId, packageVersion]
+ */
+const buildSnapshotCacheKey = (id: string | FileIndexEntryWithPkg, packageFilter?: FhirPackageIdentifier): (string | number)[] => {
   if (typeof id === 'string') {
     const pkgId = packageFilter?.id ?? '';
     const pkgVer = packageFilter?.version ?? '';
-    return `${id}::${pkgId}::${pkgVer}`;
+    return [id, pkgId, pkgVer];
   } else {
     const pkgId = id?.__packageId ?? '';
     const pkgVer = id?.__packageVersion ?? '';
     const filename = id?.filename ?? '';
-    return `${pkgId}::${pkgVer}::${filename}`;
+    return [pkgId, pkgVer, filename];
+  }
+};
+
+/**
+ * Build array-based cache key for type meta cache
+ * Format: [typeCode, corePackageId, corePackageVersion]
+ */
+const buildTypeMetaCacheKey = (typeCode: string, corePackage: FhirPackageIdentifier): (string | number)[] => {
+  return [typeCode, corePackage.id, corePackage.version ?? ''];
+};
+
+/**
+ * Build array-based cache key for element cache (includes package context namespace)
+ * Format: [packageContext, snapshotId, packageId, packageVersion, pathSegments]
+ */
+const buildElementCacheKey = (
+  packageContext: string,
+  snapshotId: string | FileIndexEntryWithPkg,
+  pathSegments: string,
+  packageFilter?: FhirPackageIdentifier
+): (string | number)[] => {
+  if (typeof snapshotId === 'string') {
+    const pkgId = packageFilter?.id ?? '';
+    const pkgVer = packageFilter?.version ?? '';
+    return [packageContext, snapshotId, pkgId, pkgVer, pathSegments];
+  } else {
+    const pkgId = snapshotId?.__packageId ?? '';
+    const pkgVer = snapshotId?.__packageVersion ?? '';
+    const filename = snapshotId?.filename ?? '';
+    return [packageContext, pkgId, pkgVer, filename, pathSegments];
+  }
+};
+
+/**
+ * Build array-based cache key for children cache (includes package context namespace)
+ * Format: [packageContext, snapshotId, packageId, packageVersion, fshPath]
+ */
+const buildChildrenCacheKey = (
+  packageContext: string,
+  snapshotId: string | FileIndexEntryWithPkg,
+  fshPath: string
+): (string | number)[] => {
+  if (typeof snapshotId === 'string') {
+    return [packageContext, snapshotId, '', '', fshPath];
+  } else {
+    const pkgId = snapshotId?.__packageId ?? '';
+    const pkgVer = snapshotId?.__packageVersion ?? '';
+    const filename = snapshotId?.filename ?? '';
+    return [packageContext, pkgId, pkgVer, filename, fshPath];
   }
 };
 
 export class FhirStructureNavigator {
   private fsg: FhirSnapshotGenerator;
   private logger: Logger;
-  // private memory caches
-  private snapshotCache = new Map<string, any>(); // TODO: Define a more specific type for StructureDefinition
-  private typeMetaCache = new Map<string, FileIndexEntryWithPkg>();
-  private elementCache = new Map<string, EnrichedElementDefinition>();
-  private childrenCache = new Map<string, EnrichedElementDefinition[]>();
+  private packageContext: string;
   
-  constructor(fsg: FhirSnapshotGenerator, logger?: Logger) {
+  // Two-tier caches (LRU + optional external)
+  private snapshotCache: TwoTierCache<any>;
+  private typeMetaCache: TwoTierCache<FileIndexEntryWithPkg>;
+  private elementCache: TwoTierCache<EnrichedElementDefinition>;
+  private childrenCache: TwoTierCache<EnrichedElementDefinition[]>;
+  
+  constructor(fsg: FhirSnapshotGenerator, logger?: Logger, cacheOptions?: NavigatorCacheOptions) {
     this.fsg = fsg;
     this.logger = logger || {
       // no-op logger
@@ -52,6 +260,36 @@ export class FhirStructureNavigator {
       warn: () => {},
       error: () => {}
     };
+
+    // Get normalized root packages for cache namespace
+    const normalizedPackages = this.fsg.getFpe().getNormalizedRootPackages();
+    this.packageContext = JSON.stringify(normalizedPackages);
+
+    // Initialize two-tier caches with appropriate LRU sizes
+    const hasExternalSnapshot = !!cacheOptions?.snapshotCache;
+    const hasExternalTypeMeta = !!cacheOptions?.typeMetaCache;
+    const hasExternalElement = !!cacheOptions?.elementCache;
+    const hasExternalChildren = !!cacheOptions?.childrenCache;
+
+    this.snapshotCache = new TwoTierCache(
+      hasExternalSnapshot ? 10 : 50,
+      cacheOptions?.snapshotCache
+    );
+    
+    this.typeMetaCache = new TwoTierCache(
+      hasExternalTypeMeta ? 50 : 500,
+      cacheOptions?.typeMetaCache
+    );
+    
+    this.elementCache = new TwoTierCache(
+      hasExternalElement ? 50 : 250,
+      cacheOptions?.elementCache
+    );
+    
+    this.childrenCache = new TwoTierCache(
+      hasExternalChildren ? 20 : 100,
+      cacheOptions?.childrenCache
+    );
   }
 
   public getLogger(): Logger {
@@ -67,9 +305,9 @@ export class FhirStructureNavigator {
   }
 
   private async _getCachedSnapshot(id: string | FileIndexEntryWithPkg, packageFilter?: FhirPackageIdentifier): Promise<any> {
-    const key: string = buildSnapshotCacheKey(id, packageFilter);
+    const key = buildSnapshotCacheKey(id, packageFilter);
 
-    let snapshot = this.snapshotCache.get(key);
+    let snapshot = await this.snapshotCache.get(key);
     if (!snapshot) {
       snapshot = await this.fsg.getSnapshot(id, packageFilter);
       // Enrich each element
@@ -109,10 +347,8 @@ export class FhirStructureNavigator {
               (t as EnrichedElementDefinitionType).__kind = 'system';
             } else {
               try {
-                const corePackageId = snapshot.__corePackage.id;
-                const corePackageVersion = snapshot.__corePackage.version;
-                const key = `${t.code}::${corePackageId}::${corePackageVersion}`;
-                let typeMeta = this.typeMetaCache.get(key);
+                const typeMetaKey = buildTypeMetaCacheKey(t.code, snapshot.__corePackage);
+                let typeMeta = await this.typeMetaCache.get(typeMetaKey);
                 if (!typeMeta) {
                   typeMeta = await this.fsg.getFpe().resolveMeta({
                     resourceType: 'StructureDefinition',
@@ -120,7 +356,7 @@ export class FhirStructureNavigator {
                     package: snapshot.__corePackage
                   });
                   if (typeMeta) {
-                    this.typeMetaCache.set(key, typeMeta);
+                    await this.typeMetaCache.set(typeMetaKey, typeMeta);
                   }
                 }
                 if (typeMeta?.kind) {
@@ -153,7 +389,7 @@ export class FhirStructureNavigator {
         }
       }
 
-      this.snapshotCache.set(key, snapshot);
+      await this.snapshotCache.set(key, snapshot);
     }
     return snapshot;
   }
@@ -171,8 +407,8 @@ export class FhirStructureNavigator {
     fshPath: string
   ): Promise<EnrichedElementDefinition[]> {
     // Check children cache
-    let cacheKey = `${buildSnapshotCacheKey(snapshotId)}::${fshPath}`;
-    const cached = this.childrenCache.get(cacheKey);
+    let cacheKey = buildChildrenCacheKey(this.packageContext, snapshotId, fshPath);
+    const cached = await this.childrenCache.get(cacheKey);
     if (cached) return cached;
     const segments = fshPath === '.' ? [] : splitFshPath(fshPath);
 
@@ -184,8 +420,8 @@ export class FhirStructureNavigator {
     if (resolved.__fromDefinition && resolved.__fromDefinition !== (typeof snapshotId === 'string' ? snapshotId : snapshotId.filename)) {
       // If the resolved element is from a different profile, use that profile's snapshot
       actualSnapshotId = resolved.__fromDefinition;
-      cacheKey = `${buildSnapshotCacheKey(actualSnapshotId)}::${fshPath}`;
-      const profileCached = this.childrenCache.get(cacheKey);
+      cacheKey = buildChildrenCacheKey(this.packageContext, actualSnapshotId, fshPath);
+      const profileCached = await this.childrenCache.get(cacheKey);
       if (profileCached) return profileCached;
     }
 
@@ -202,7 +438,7 @@ export class FhirStructureNavigator {
 
     if (directChildren.length > 0) {
       result = directChildren.map(el => ({ ...el }));
-      this.childrenCache.set(cacheKey, result); // ✅ Cache children
+      await this.childrenCache.set(cacheKey, result); // ✅ Cache children
       return result;
     }
 
@@ -251,26 +487,26 @@ export class FhirStructureNavigator {
       if (resolved.id === targetId) {
         // we are at the root of the (profile) snapshot already
         const profileMeta = await this.fsg.getMetadata(resolved.__fromDefinition, { id: resolved.__packageId, version: resolved.__packageVersion });
-        cacheKey = `${buildSnapshotCacheKey(profileMeta)}::.`;
+        cacheKey = buildChildrenCacheKey(this.packageContext, profileMeta, '.');
         children = await this.getChildren(resolved.__fromDefinition, '.');
       } else {
         if (isProfile) {
           // Directly fetch children from the profile snapshot root
-          cacheKey = `${buildSnapshotCacheKey(targetId)}::.`;
+          cacheKey = buildChildrenCacheKey(this.packageContext, targetId, '.');
           children = await this.getChildren(targetId, '.');
         } else {
           // Base type path (previous logic)
           const typeMeta = await this.fsg.getMetadata(targetId, snapshot.__corePackage);
-          cacheKey = `${buildSnapshotCacheKey(typeMeta)}::.`;
+          cacheKey = buildChildrenCacheKey(this.packageContext, typeMeta, '.');
           children = await this.getChildren(targetId, '.');
         }
       }
-      this.childrenCache.set(cacheKey, children);
+      await this.childrenCache.set(cacheKey, children);
       return children;
     }
 
     result = []; // No children found
-    this.childrenCache.set(cacheKey, result); // ✅ Cache empty result
+    await this.childrenCache.set(cacheKey, result); // ✅ Cache empty result
     return result;
   }
 
@@ -280,8 +516,9 @@ export class FhirStructureNavigator {
     packageFilter?: FhirPackageIdentifier,
     cameFromElement?: EnrichedElementDefinition
   ): Promise<EnrichedElementDefinition> {
-    let cacheKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${pathSegments.join('.')}`;
-    const cached = this.elementCache.get(cacheKey);
+    const pathString = pathSegments.join('.');
+    let cacheKey = buildElementCacheKey(this.packageContext, snapshotId, pathString, packageFilter);
+    const cached = await this.elementCache.get(cacheKey);
     if (cached) return cached;
 
     const snapshot = await this._getCachedSnapshot(snapshotId, packageFilter);
@@ -304,7 +541,7 @@ export class FhirStructureNavigator {
           root.__name = cameFromElement.__name;
         }
       }
-      this.elementCache.set(cacheKey, root); // ✅ cache root
+      await this.elementCache.set(cacheKey, root); // ✅ cache root
       return root;
     }
 
@@ -315,8 +552,8 @@ export class FhirStructureNavigator {
 
     for (let i = 0; i < pathSegments.length; i++) {
       const subPath = pathSegments.slice(0, i + 1).join('.');
-      cacheKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${subPath}`;
-      const cached = this.elementCache.get(cacheKey);
+      cacheKey = buildElementCacheKey(this.packageContext, snapshotId, subPath, packageFilter);
+      const cached = await this.elementCache.get(cacheKey);
       if (cached) {
         currentElement = cached;
         currentPath = cached.id;
@@ -362,17 +599,18 @@ export class FhirStructureNavigator {
 
           currentElement = resolved;
           currentPath = resolved.id;
-          this.elementCache.set(cacheKey, currentElement); // ✅ cache after resolving slice
+          await this.elementCache.set(cacheKey, currentElement); // ✅ cache after resolving slice
           continue;
         }
       }
 
       currentPath = currentElement.id;
-      this.elementCache.set(cacheKey, currentElement); // ✅ cache after resolving each segment
+      await this.elementCache.set(cacheKey, currentElement); // ✅ cache after resolving each segment
     }
 
-    const finalKey = `${buildSnapshotCacheKey(snapshotId, packageFilter)}::${pathSegments.join('.')}`;
-    return this.elementCache.get(finalKey)!; // ✅ guaranteed to be set during traversal
+    const finalKey = buildElementCacheKey(this.packageContext, snapshotId, pathString, packageFilter);
+    const finalElement = await this.elementCache.get(finalKey);
+    return finalElement!; // ✅ guaranteed to be set during traversal
   }
 
 
