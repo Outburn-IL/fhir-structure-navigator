@@ -1,0 +1,199 @@
+# Cache Architecture
+
+The FhirStructureNavigator implements a sophisticated two-tier caching strategy designed for high performance and flexibility.
+
+## Overview
+
+The navigator maintains four independent cache types:
+1. **Snapshot Cache** - Stores enriched FHIR StructureDefinition snapshots
+2. **Type Meta Cache** - Stores metadata about FHIR types (kind, resourceType, etc.)
+3. **Element Cache** - Stores resolved ElementDefinitions by path
+4. **Children Cache** - Stores arrays of child elements
+
+Each cache consists of two layers:
+- **Inner LRU Layer**: Fast in-memory cache for ultra-hot entries
+- **External Layer** (optional): Pluggable persistent cache (e.g., LMDB)
+
+## Cache Key Design
+
+All cache keys use **array-based keys** instead of concatenated strings. This design:
+- Eliminates string concatenation/parsing overhead
+- Enables efficient range queries in LMDB
+- Provides natural key structure for database indexing
+
+### Key Formats
+
+#### Snapshot Cache
+```typescript
+[id: string, packageId: string, packageVersion: string]
+```
+Example: `["Patient", "hl7.fhir.r4.core", "4.0.1"]`
+
+#### Type Meta Cache
+```typescript
+[typeCode: string, corePackageId: string, corePackageVersion: string]
+```
+Example: `["Quantity", "hl7.fhir.r4.core", "4.0.1"]`
+
+#### Element Cache (with package context)
+```typescript
+[packageContext: string, snapshotId: string, packageId: string, packageVersion: string, pathSegments: string]
+```
+Example: `['[{"id":"hl7.fhir.r4.core","version":"4.0.1"}]', "Patient", "", "", "identifier.system"]`
+
+#### Children Cache (with package context)
+```typescript
+[packageContext: string, snapshotId: string, packageId: string, packageVersion: string, fshPath: string]
+```
+Example: `['[{"id":"hl7.fhir.r4.core","version":"4.0.1"}]', "Patient", "", "", "identifier"]`
+
+## Package Context Namespacing
+
+The element and children caches include a **package context namespace** derived from `FPE.getNormalizedRootPackages()`. This ensures:
+- Safe sharing of external caches between navigator instances
+- Different package contexts maintain separate cache entries
+- Normalized packages are canonically stringified (already sorted and deduped)
+
+The snapshot and type meta caches already include package information in their keys, so no additional namespacing is needed.
+
+## LRU Sizing Strategy
+
+LRU sizes are automatically configured based on whether external caches are provided:
+
+| Cache Type     | Small (with external) | Large (no external) | Rationale |
+|----------------|----------------------|---------------------|-----------|
+| Snapshot       | 10                   | 50                  | Snapshots are large; rely on external storage |
+| Type Meta      | 50                   | 500                 | Small metadata; can cache many in-memory |
+| Element        | 50                   | 250                 | Frequently accessed; medium LRU is optimal |
+| Children       | 20                   | 100                 | Arrays can be large; prefer external storage |
+
+**Small sizes** are used when an external cache is available - the LRU serves as a fast L1 cache for only the hottest entries.
+
+**Large sizes** are used when no external cache is provided - the LRU must serve as the primary cache.
+
+## Cache Interface
+
+The `ICache<T>` interface supports both synchronous and asynchronous implementations:
+
+```typescript
+export interface ICache<T> {
+  get(key: (string | number)[]): Promise<T | undefined> | T | undefined;
+  set(key: (string | number)[], value: T): Promise<void> | void;
+  has(key: (string | number)[]): Promise<boolean> | boolean;
+  delete(key: (string | number)[]): Promise<boolean> | boolean;
+  clear(): Promise<void> | void;
+}
+```
+
+This allows:
+- Synchronous in-memory implementations (Map, LRU)
+- Asynchronous persistent implementations (LMDB, Redis, etc.)
+- The navigator internally handles both with `async/await`
+
+## Implementing a Custom Cache
+
+### Example: LMDB Cache
+
+```typescript
+import { ICache } from '@outburn/structure-navigator';
+import lmdb from 'lmdb';
+
+export class LMDBCache<T> implements ICache<T> {
+  private db: lmdb.Database;
+
+  constructor(name: string, rootDb: lmdb.RootDatabase) {
+    this.db = rootDb.openDB({ name, encoding: 'msgpack' });
+  }
+
+  async get(key: (string | number)[]): Promise<T | undefined> {
+    return this.db.get(key);
+  }
+
+  async set(key: (string | number)[], value: T): Promise<void> {
+    await this.db.put(key, value);
+  }
+
+  async has(key: (string | number)[]): Promise<boolean> {
+    return this.db.doesExist(key);
+  }
+
+  async delete(key: (string | number)[]): Promise<boolean> {
+    return this.db.remove(key);
+  }
+
+  async clear(): Promise<void> {
+    await this.db.clearAsync();
+  }
+}
+```
+
+### Usage
+
+```typescript
+import { open } from 'lmdb';
+import { FhirStructureNavigator } from '@outburn/structure-navigator';
+import { LMDBCache } from './lmdb-cache';
+
+const rootDb = open({ path: './cache-db', compression: true });
+
+const nav = new FhirStructureNavigator(fsg, logger, {
+  snapshotCache: new LMDBCache('snapshots', rootDb),
+  typeMetaCache: new LMDBCache('typemeta', rootDb),
+  elementCache: new LMDBCache('elements', rootDb),
+  childrenCache: new LMDBCache('children', rootDb)
+});
+```
+
+## Cache Separation
+
+Each cache type is provided as a **separate interface instance**. This means:
+- No manual namespacing needed (e.g., no `snapshot::`, `element::` prefixes)
+- External implementations can choose their storage strategy
+- Can mix and match: some caches external, others default
+- Can use different backends for different cache types
+
+Example - external snapshots only:
+```typescript
+const nav = new FhirStructureNavigator(fsg, logger, {
+  snapshotCache: new LMDBCache('snapshots', rootDb)
+  // Other caches will use default LRU-only
+});
+```
+
+## Performance Characteristics
+
+### Without External Cache
+- **Speed**: Very fast (in-memory only)
+- **Memory**: Higher memory usage
+- **Persistence**: None (cache lost on restart)
+- **Sharing**: Cannot share between processes
+
+### With External Cache
+- **Speed**: Still fast (hot path via LRU, cold path via external)
+- **Memory**: Lower memory footprint
+- **Persistence**: Survives restarts
+- **Sharing**: Can be shared between processes/navigator instances
+
+### Two-Tier Benefits
+1. **Hot entries**: Served from in-memory LRU (microseconds)
+2. **Warm entries**: Retrieved from external cache, promoted to LRU (milliseconds)
+3. **Cold entries**: Computed and cached in both layers
+4. **Optimal memory**: Only hottest entries consume RAM
+
+## Best Practices
+
+1. **Use LMDB for production**: Provides persistence and cross-process sharing
+2. **Size databases appropriately**: LMDB map size should accommodate growth
+3. **Monitor cache hit rates**: Log cache misses to optimize LRU sizes
+4. **Share caches carefully**: Ensure package contexts align when sharing
+5. **Consider compression**: LMDB compression can save significant disk space
+6. **Separate by environment**: Dev/test/prod should have separate cache databases
+
+## Future Enhancements
+
+Potential improvements to the cache architecture:
+- Cache eviction policies (TTL, size limits)
+- Cache statistics and monitoring
+- Batch operations for improved performance
+- Cache warming strategies
+- Distributed cache support (Redis, Memcached)

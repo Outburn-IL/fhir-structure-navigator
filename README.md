@@ -50,10 +50,89 @@ console.log(children.map(c => c.path));
 
 ## API
 
-### `new FhirStructureNavigator(fsg, logger?)`
+### `new FhirStructureNavigator(fsg, logger?, cacheOptions?)`
 
 - `fsg`: a `FhirSnapshotGenerator`.
 - `logger` (optional): `{ debug, info, warn, error }`.
+- `cacheOptions` (optional): External cache implementations for DI (see Cache Architecture below).
+
+### Cache Architecture
+
+The navigator implements a two-tier caching strategy:
+
+1. **Inner LRU Layer**: Fast, in-memory LRU cache for ultra-hot entries
+2. **External Layer** (optional): Pluggable external cache (e.g., LMDB) via dependency injection
+
+#### Cache Types
+
+Four independent cache interfaces can be injected:
+
+```ts
+interface NavigatorCacheOptions {
+  snapshotCache?: ICache<any>;
+  typeMetaCache?: ICache<FileIndexEntryWithPkg>;
+  elementCache?: ICache<EnrichedElementDefinition>;
+  childrenCache?: ICache<EnrichedElementDefinition[]>;
+}
+```
+
+#### Cache Interface
+
+The `ICache<T>` interface supports array-based keys for LMDB compatibility:
+
+```ts
+interface ICache<T> {
+  get(key: (string | number)[]): Promise<T | undefined> | T | undefined;
+  set(key: (string | number)[], value: T): Promise<void> | void;
+  has(key: (string | number)[]): Promise<boolean> | boolean;
+  delete(key: (string | number)[]): Promise<boolean> | boolean;
+  clear(): Promise<void> | void;
+}
+```
+
+Keys are structured as arrays to avoid string concatenation/splitting overhead in LMDB implementations.
+
+#### LRU Sizing
+
+When an external cache is provided for a cache type, the inner LRU is sized smaller (just for ultra-hot entries). When no external cache is available, the LRU is larger:
+
+| Cache Type | Small (with external) | Large (no external) |
+|------------|----------------------|---------------------|
+| Snapshot   | 10                   | 50                  |
+| TypeMeta   | 50                   | 500                 |
+| Element    | 50                   | 250                 |
+| Children   | 20                   | 100                 |
+
+#### Package Context Namespacing
+
+Element and children caches include a package context namespace (from `FPE.getNormalizedRootPackages()`) in their keys. This ensures safe sharing of external caches between navigator instances with different package contexts.
+
+The snapshot and typeMeta caches already include package information in their keys, so no additional namespacing is needed.
+
+#### Example: Custom Cache Implementation
+
+```ts
+import { ICache } from '@outburn/structure-navigator';
+
+class MyLMDBCache<T> implements ICache<T> {
+  async get(key: (string | number)[]): Promise<T | undefined> {
+    // Use key array directly with LMDB range queries
+    return await this.db.get(key);
+  }
+  
+  async set(key: (string | number)[], value: T): Promise<void> {
+    await this.db.put(key, value);
+  }
+  
+  // ... implement other methods
+}
+
+const nav = new FhirStructureNavigator(fsg, logger, {
+  snapshotCache: new MyLMDBCache(),
+  elementCache: new MyLMDBCache(),
+  childrenCache: new MyLMDBCache()
+});
+```
 
 ### `getElement(snapshotId, fshPath)`
 
