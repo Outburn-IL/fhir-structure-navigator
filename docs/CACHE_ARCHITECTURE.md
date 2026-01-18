@@ -25,9 +25,11 @@ All cache keys use **array-based keys** instead of concatenated strings. This de
 
 #### Snapshot Cache
 ```typescript
-[id: string, packageId: string, packageVersion: string]
+[normalizedSnapshotId: string, packageId: string, packageVersion: string]
 ```
-Example: `["Patient", "hl7.fhir.r4.core", "4.0.1"]`
+Examples:
+- String ID: `["Patient", "hl7.fhir.r4.core", "4.0.1"]`
+- FileIndexEntryWithPkg: `["hl7.fhir.r4.core::4.0.1::StructureDefinition-patient.json", "", ""]`
 
 #### Type Meta Cache
 ```typescript
@@ -37,15 +39,28 @@ Example: `["Quantity", "hl7.fhir.r4.core", "4.0.1"]`
 
 #### Element Cache (with package context)
 ```typescript
-[packageContext: string, snapshotId: string, packageId: string, packageVersion: string, pathSegments: string]
+[packageContextOrFilter: string, normalizedSnapshotId: string, pathSegments: string]
 ```
-Example: `['[{"id":"hl7.fhir.r4.core","version":"4.0.1"}]', "Patient", "", "", "identifier.system"]`
+Examples:
+- String ID: `['[{"id":"hl7.fhir.r4.core","version":"4.0.1"}]', "Patient", "identifier.system"]`
+- FileIndexEntryWithPkg: `['[{"id":"hl7.fhir.us.core","version":"6.1.0"}]', "hl7.fhir.us.core::6.1.0::StructureDefinition-us-core-patient.json", "identifier.system"]`
+- With packageFilter: `['[{"id":"hl7.fhir.r4.core","version":"4.0.1"}]', "Patient", "identifier.system"]`
+
+**Note**: If a `packageFilter` is provided to the resolution methods, it overrides the general `packageContext` for cache key generation.
 
 #### Children Cache (with package context)
 ```typescript
-[packageContext: string, snapshotId: string, packageId: string, packageVersion: string, fshPath: string]
+[packageContext: string, normalizedSnapshotId: string, fshPath: string]
 ```
-Example: `['[{"id":"hl7.fhir.r4.core","version":"4.0.1"}]', "Patient", "", "", "identifier"]`
+Examples:
+- String ID: `['[{"id":"hl7.fhir.r4.core","version":"4.0.1"}]', "Patient", "identifier"]`
+- FileIndexEntryWithPkg: `['[{"id":"hl7.fhir.us.core","version":"6.1.0"}]', "hl7.fhir.us.core::6.1.0::StructureDefinition-us-core-patient.json", "identifier"]`
+
+**Key Design Notes**:
+- When `snapshotId` is a `FileIndexEntryWithPkg`, it's normalized to: `packageId::packageVersion::filename`
+- For snapshot cache with `FileIndexEntryWithPkg`, package ID/version slots are empty strings (already in normalized ID)
+- Element cache uses `packageFilter` if provided, otherwise uses `packageContext`
+- This ensures consistent cache keys regardless of how resources are accessed
 
 ## Package Context Namespacing
 
@@ -53,6 +68,8 @@ The element and children caches include a **package context namespace** derived 
 - Safe sharing of external caches between navigator instances
 - Different package contexts maintain separate cache entries
 - Normalized packages are canonically stringified (already sorted and deduped)
+
+For the **element cache**, if a `packageFilter` parameter is provided during element resolution, it takes precedence over the general package context for that specific cache entry.
 
 The snapshot and type meta caches already include package information in their keys, so no additional namespacing is needed.
 
