@@ -1,6 +1,6 @@
 {
   "name": "@outburn/structure-navigator",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Navigate and resolve FHIR element definitions using FSH-like paths",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
