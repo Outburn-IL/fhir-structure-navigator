@@ -75,18 +75,16 @@ The snapshot and type meta caches already include package information in their k
 
 ## LRU Sizing Strategy
 
-LRU sizes are automatically configured based on whether external caches are provided:
+Each cache always has an in-memory LRU hot layer, regardless of whether an external cache is provided. Providing an external cache does **not** change the in-memory LRU sizing; it simply adds an optional persistent/shared "cold" layer that entries can be promoted from.
 
-| Cache Type     | Small (with external) | Large (no external) | Rationale |
-|----------------|----------------------|---------------------|-----------|
-| Snapshot       | 10                   | 50                  | Snapshots are large; rely on external storage |
-| Type Meta      | 50                   | 500                 | Small metadata; can cache many in-memory |
-| Element        | 50                   | 250                 | Frequently accessed; medium LRU is optimal |
-| Children       | 20                   | 100                 | Arrays can be large; prefer external storage |
+Default LRU sizes:
 
-**Small sizes** are used when an external cache is available - the LRU serves as a fast L1 cache for only the hottest entries.
-
-**Large sizes** are used when no external cache is provided - the LRU must serve as the primary cache.
+| Cache Type     | Default LRU size | Rationale |
+|----------------|------------------|-----------|
+| Snapshot       | 100              | Snapshots are large; keep a reasonable hot working set in-memory |
+| Type Meta      | 500              | Small metadata; cache many in-memory |
+| Element        | 2000             | Frequently accessed; larger LRU improves path traversal locality |
+| Children       | 500              | Arrays can be large; cache common lookups |
 
 ## Cache Interface
 
@@ -181,15 +179,16 @@ const nav = new FhirStructureNavigator(fsg, logger, {
 
 ### Without External Cache
 - **Speed**: Very fast (in-memory only)
-- **Memory**: Higher memory usage
+- **Memory**: Bounded by the default LRU sizes
 - **Persistence**: None (cache lost on restart)
 - **Sharing**: Cannot share between processes
 
 ### With External Cache
 - **Speed**: Still fast (hot path via LRU, cold path via external)
-- **Memory**: Lower memory footprint
+- **Memory**: Same in-memory footprint (LRU sizes are unchanged)
 - **Persistence**: Survives restarts
 - **Sharing**: Can be shared between processes/navigator instances
+- **Disk**: External cache adds disk usage (backend-dependent)
 
 ### Two-Tier Benefits
 1. **Hot entries**: Served from in-memory LRU (microseconds)
@@ -201,7 +200,7 @@ const nav = new FhirStructureNavigator(fsg, logger, {
 
 1. **Use LMDB for production**: Provides persistence and cross-process sharing
 2. **Size databases appropriately**: LMDB map size should accommodate growth
-3. **Monitor cache hit rates**: Log cache misses to optimize LRU sizes
+3. **Monitor cache hit rates**: Log cache misses to validate sizing and external cache ROI
 4. **Share caches carefully**: Ensure package contexts align when sharing
 5. **Consider compression**: LMDB compression can save significant disk space
 6. **Separate by environment**: Dev/test/prod should have separate cache databases
