@@ -267,28 +267,23 @@ export class FhirStructureNavigator {
     this.packageContext = JSON.stringify(normalizedPackages);
 
     // Initialize two-tier caches with appropriate LRU sizes
-    const hasExternalSnapshot = !!cacheOptions?.snapshotCache;
-    const hasExternalTypeMeta = !!cacheOptions?.typeMetaCache;
-    const hasExternalElement = !!cacheOptions?.elementCache;
-    const hasExternalChildren = !!cacheOptions?.childrenCache;
-
     this.snapshotCache = new TwoTierCache(
-      hasExternalSnapshot ? 10 : 50,
+      100,
       cacheOptions?.snapshotCache
     );
     
     this.typeMetaCache = new TwoTierCache(
-      hasExternalTypeMeta ? 50 : 500,
+      500,
       cacheOptions?.typeMetaCache
     );
     
     this.elementCache = new TwoTierCache(
-      hasExternalElement ? 50 : 250,
+      2000,
       cacheOptions?.elementCache
     );
     
     this.childrenCache = new TwoTierCache(
-      hasExternalChildren ? 20 : 100,
+      500,
       cacheOptions?.childrenCache
     );
   }
