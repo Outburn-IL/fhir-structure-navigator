@@ -139,22 +139,6 @@ When working on the codebase:
 2. **Use array keys**: Pass array keys to cache key builder functions
 3. **Don't modify cache directly**: Use the TwoTierCache abstraction
 
-## Performance Implications
-
-### Without External Cache (Default)
-- **Same as before**: fast, in-memory operation
-- **Memory usage**: Bounded by the default LRU sizes
-- All operations remain in-memory and fast
-- No persistence across restarts
-
-### With External Cache
-- **First access**: Slightly slower (external cache lookup)
-- **Subsequent accesses**: Just as fast (LRU hit)
-- **Memory usage**: Same in-memory footprint (LRU sizes are unchanged)
-- **Persistence**: Cache survives restarts
-- **Sharing**: Multiple processes can share the same cache
-- **Disk**: External cache adds disk usage (backend-dependent)
-
 ## Testing
 
 All existing tests pass without modification, confirming backward compatibility:

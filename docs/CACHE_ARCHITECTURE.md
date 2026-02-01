@@ -174,28 +174,6 @@ const nav = new FhirStructureNavigator(fsg, logger, {
   // Other caches will use default LRU-only
 });
 ```
-
-## Performance Characteristics
-
-### Without External Cache
-- **Speed**: Very fast (in-memory only)
-- **Memory**: Bounded by the default LRU sizes
-- **Persistence**: None (cache lost on restart)
-- **Sharing**: Cannot share between processes
-
-### With External Cache
-- **Speed**: Still fast (hot path via LRU, cold path via external)
-- **Memory**: Same in-memory footprint (LRU sizes are unchanged)
-- **Persistence**: Survives restarts
-- **Sharing**: Can be shared between processes/navigator instances
-- **Disk**: External cache adds disk usage (backend-dependent)
-
-### Two-Tier Benefits
-1. **Hot entries**: Served from in-memory LRU (microseconds)
-2. **Warm entries**: Retrieved from external cache, promoted to LRU (milliseconds)
-3. **Cold entries**: Computed and cached in both layers
-4. **Optimal memory**: Only hottest entries consume RAM
-
 ## Best Practices
 
 1. **Use LMDB for production**: Provides persistence and cross-process sharing
