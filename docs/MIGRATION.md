@@ -107,13 +107,13 @@ This ensures:
 
 ### LRU Size Configuration
 
-Automatic LRU sizing based on external cache availability:
+LRU sizes are fixed defaults and do not change based on whether an external cache is provided. External caches add an optional persistent/shared cold layer; hot entries are still served from (and promoted into) the in-memory LRU.
 
 ```typescript
-this.snapshotCache = new TwoTierCache(
-  hasExternalSnapshot ? 10 : 50,  // Small when external, large when not
-  cacheOptions?.snapshotCache
-);
+this.snapshotCache = new TwoTierCache(100, cacheOptions?.snapshotCache);
+this.typeMetaCache = new TwoTierCache(500, cacheOptions?.typeMetaCache);
+this.elementCache = new TwoTierCache(2000, cacheOptions?.elementCache);
+this.childrenCache = new TwoTierCache(500, cacheOptions?.childrenCache);
 ```
 
 ## Migration Path
@@ -138,20 +138,6 @@ When working on the codebase:
 1. **All cache operations are now async**: Always use `await` when calling cache methods
 2. **Use array keys**: Pass array keys to cache key builder functions
 3. **Don't modify cache directly**: Use the TwoTierCache abstraction
-
-## Performance Implications
-
-### Without External Cache (Default)
-- **Same as before**, but with slightly larger LRU caches
-- All operations remain in-memory and fast
-- No persistence across restarts
-
-### With External Cache
-- **First access**: Slightly slower (external cache lookup)
-- **Subsequent accesses**: Just as fast (LRU hit)
-- **Memory usage**: Significantly lower (only hot entries in memory)
-- **Persistence**: Cache survives restarts
-- **Sharing**: Multiple processes can share the same cache
 
 ## Testing
 

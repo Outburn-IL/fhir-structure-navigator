@@ -73,6 +73,12 @@ interface NavigatorCacheOptions {
   typeMetaCache?: ICache<FileIndexEntryWithPkg>;
   elementCache?: ICache<EnrichedElementDefinition>;
   childrenCache?: ICache<EnrichedElementDefinition[]>;
+  lruSizes?: {
+    snapshot?: number;
+    typeMeta?: number;
+    element?: number;
+    children?: number;
+  };
 }
 ```
 
@@ -94,14 +100,30 @@ Keys are structured as arrays to avoid string concatenation/splitting overhead i
 
 #### LRU Sizing
 
-When an external cache is provided for a cache type, the inner LRU is sized smaller (just for ultra-hot entries). When no external cache is available, the LRU is larger:
+Each cache always has an in-memory LRU hot layer, regardless of whether an external cache is provided. Providing an external cache does **not** change the in-memory LRU sizing; it simply adds an optional "cold" layer that entries can be promoted from.
 
-| Cache Type | Small (with external) | Large (no external) |
-|------------|----------------------|---------------------|
-| Snapshot   | 10                   | 50                  |
-| TypeMeta   | 50                   | 500                 |
-| Element    | 50                   | 250                 |
-| Children   | 20                   | 100                 |
+Default LRU sizes:
+
+| Cache Type | Default LRU size |
+|------------|------------------|
+| Snapshot   | 100              |
+| TypeMeta   | 500              |
+| Element    | 2000             |
+| Children   | 500              |
+
+You can override any of these (entry counts) via `cacheOptions.lruSizes`:
+
+```ts
+const nav = new FhirStructureNavigator(fsg, logger, {
+  lruSizes: {
+    // keep more element path resolutions hot in memory
+    element: 5000,
+
+    // keep fewer snapshots hot (lower memory footprint)
+    snapshot: 50
+  }
+});
+```
 
 #### Package Context Namespacing
 

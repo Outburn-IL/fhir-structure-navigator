@@ -98,8 +98,13 @@ class TwoTierCache<T extends {}> implements ICache<T> {
     
     // Set in external if available
     if (this.external) {
+      // Fire-and-forget: call external.set immediately but don't await it.
+      // Swallow both sync throws and async rejections (errors are intentionally ignored).
       try {
-        await this.external.set(key, value);
+        const result = this.external.set(key, value);
+        void Promise.resolve(result).catch(() => {
+          // External cache error - continue (LRU is already set)
+        });
       } catch {
         // External cache error - continue (LRU is already set)
       }
@@ -165,6 +170,18 @@ export interface NavigatorCacheOptions {
   typeMetaCache?: ICache<FileIndexEntryWithPkg>;
   elementCache?: ICache<EnrichedElementDefinition>;
   childrenCache?: ICache<EnrichedElementDefinition[]>;
+  /**
+   * Optional tuning of the in-memory LRU hot-layer sizes.
+   * Values are entry counts (not bytes). Omit any field to use the default.
+   */
+  lruSizes?: NavigatorLruSizes;
+}
+
+export interface NavigatorLruSizes {
+  snapshot?: number;
+  typeMeta?: number;
+  element?: number;
+  children?: number;
 }
 
 /**
@@ -264,29 +281,30 @@ export class FhirStructureNavigator {
     const normalizedPackages = this.fsg.getFpe().getNormalizedRootPackages();
     this.packageContext = JSON.stringify(normalizedPackages);
 
-    // Initialize two-tier caches with appropriate LRU sizes
-    const hasExternalSnapshot = !!cacheOptions?.snapshotCache;
-    const hasExternalTypeMeta = !!cacheOptions?.typeMetaCache;
-    const hasExternalElement = !!cacheOptions?.elementCache;
-    const hasExternalChildren = !!cacheOptions?.childrenCache;
+    const normalizeLruSize = (value: number | undefined, fallback: number): number => {
+      if (value === undefined) return fallback;
+      if (!Number.isFinite(value)) return fallback;
+      return Math.max(0, Math.floor(value));
+    };
 
+    // Initialize two-tier caches with configurable LRU sizes
     this.snapshotCache = new TwoTierCache(
-      hasExternalSnapshot ? 10 : 50,
+      normalizeLruSize(cacheOptions?.lruSizes?.snapshot, 100),
       cacheOptions?.snapshotCache
     );
     
     this.typeMetaCache = new TwoTierCache(
-      hasExternalTypeMeta ? 50 : 500,
+      normalizeLruSize(cacheOptions?.lruSizes?.typeMeta, 500),
       cacheOptions?.typeMetaCache
     );
     
     this.elementCache = new TwoTierCache(
-      hasExternalElement ? 50 : 250,
+      normalizeLruSize(cacheOptions?.lruSizes?.element, 2000),
       cacheOptions?.elementCache
     );
     
     this.childrenCache = new TwoTierCache(
-      hasExternalChildren ? 20 : 100,
+      normalizeLruSize(cacheOptions?.lruSizes?.children, 500),
       cacheOptions?.childrenCache
     );
   }
