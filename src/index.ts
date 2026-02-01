@@ -98,13 +98,16 @@ class TwoTierCache<T extends {}> implements ICache<T> {
     
     // Set in external if available
     if (this.external) {
-      // Fire-and-forget: do not block the caller on external cache latency.
+      // Fire-and-forget: call external.set immediately but don't await it.
       // Swallow both sync throws and async rejections (errors are intentionally ignored).
-      void Promise.resolve()
-        .then(() => this.external!.set(key, value))
-        .catch(() => {
+      try {
+        const result = this.external.set(key, value);
+        void Promise.resolve(result).catch(() => {
           // External cache error - continue (LRU is already set)
         });
+      } catch {
+        // External cache error - continue (LRU is already set)
+      }
     }
   }
 
@@ -279,7 +282,7 @@ export class FhirStructureNavigator {
     this.packageContext = JSON.stringify(normalizedPackages);
 
     const normalizeLruSize = (value: number | undefined, fallback: number): number => {
-      if (value === undefined || value === null) return fallback;
+      if (value === undefined) return fallback;
       if (!Number.isFinite(value)) return fallback;
       return Math.max(0, Math.floor(value));
     };
