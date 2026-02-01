@@ -167,6 +167,18 @@ export interface NavigatorCacheOptions {
   typeMetaCache?: ICache<FileIndexEntryWithPkg>;
   elementCache?: ICache<EnrichedElementDefinition>;
   childrenCache?: ICache<EnrichedElementDefinition[]>;
+  /**
+   * Optional tuning of the in-memory LRU hot-layer sizes.
+   * Values are entry counts (not bytes). Omit any field to use the default.
+   */
+  lruSizes?: NavigatorLruSizes;
+}
+
+export interface NavigatorLruSizes {
+  snapshot?: number;
+  typeMeta?: number;
+  element?: number;
+  children?: number;
 }
 
 /**
@@ -266,24 +278,30 @@ export class FhirStructureNavigator {
     const normalizedPackages = this.fsg.getFpe().getNormalizedRootPackages();
     this.packageContext = JSON.stringify(normalizedPackages);
 
-    // Initialize two-tier caches with appropriate LRU sizes
+    const normalizeLruSize = (value: number | undefined, fallback: number): number => {
+      if (value === undefined || value === null) return fallback;
+      if (!Number.isFinite(value)) return fallback;
+      return Math.max(0, Math.floor(value));
+    };
+
+    // Initialize two-tier caches with configurable LRU sizes
     this.snapshotCache = new TwoTierCache(
-      100,
+      normalizeLruSize(cacheOptions?.lruSizes?.snapshot, 100),
       cacheOptions?.snapshotCache
     );
     
     this.typeMetaCache = new TwoTierCache(
-      500,
+      normalizeLruSize(cacheOptions?.lruSizes?.typeMeta, 500),
       cacheOptions?.typeMetaCache
     );
     
     this.elementCache = new TwoTierCache(
-      2000,
+      normalizeLruSize(cacheOptions?.lruSizes?.element, 2000),
       cacheOptions?.elementCache
     );
     
     this.childrenCache = new TwoTierCache(
-      500,
+      normalizeLruSize(cacheOptions?.lruSizes?.children, 500),
       cacheOptions?.childrenCache
     );
   }

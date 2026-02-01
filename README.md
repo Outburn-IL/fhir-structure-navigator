@@ -73,6 +73,12 @@ interface NavigatorCacheOptions {
   typeMetaCache?: ICache<FileIndexEntryWithPkg>;
   elementCache?: ICache<EnrichedElementDefinition>;
   childrenCache?: ICache<EnrichedElementDefinition[]>;
+  lruSizes?: {
+    snapshot?: number;
+    typeMeta?: number;
+    element?: number;
+    children?: number;
+  };
 }
 ```
 
@@ -104,6 +110,20 @@ Default LRU sizes:
 | TypeMeta   | 500              |
 | Element    | 2000             |
 | Children   | 500              |
+
+You can override any of these (entry counts) via `cacheOptions.lruSizes`:
+
+```ts
+const nav = new FhirStructureNavigator(fsg, logger, {
+  lruSizes: {
+    // keep more element path resolutions hot in memory
+    element: 5000,
+
+    // keep fewer snapshots hot (lower memory footprint)
+    snapshot: 50
+  }
+});
+```
 
 #### Package Context Namespacing
 

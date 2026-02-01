@@ -21,6 +21,26 @@ beforeAll(async () => {
 }, 900000);
 
 describe('LRU Cache', () => {
+  it('respects configured LRU sizes', async () => {
+    const navigator = new FhirStructureNavigator(fsg, undefined, {
+      lruSizes: {
+        element: 1
+      }
+    });
+
+    // Touch two different element paths so the element LRU would need to evict
+    await navigator.getElement('Patient', 'gender');
+    await navigator.getElement('Patient', 'id');
+
+    // Reach into private fields to assert configuration is applied.
+    const elementTwoTier = (navigator as any).elementCache;
+    const lruWrapper = elementTwoTier.lru;
+    const lru = lruWrapper.cache;
+
+    expect(lru.max).toBe(1);
+    expect(lru.size).toBeLessThanOrEqual(1);
+  });
+
   it('evicts least recently used items when capacity is reached', async () => {
     // Create a navigator with small cache sizes
     const navigator = new FhirStructureNavigator(fsg, undefined, {
