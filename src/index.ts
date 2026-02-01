@@ -98,11 +98,13 @@ class TwoTierCache<T extends {}> implements ICache<T> {
     
     // Set in external if available
     if (this.external) {
-      try {
-        await this.external.set(key, value);
-      } catch {
-        // External cache error - continue (LRU is already set)
-      }
+      // Fire-and-forget: do not block the caller on external cache latency.
+      // Swallow both sync throws and async rejections (errors are intentionally ignored).
+      void Promise.resolve()
+        .then(() => this.external!.set(key, value))
+        .catch(() => {
+          // External cache error - continue (LRU is already set)
+        });
     }
   }
 
