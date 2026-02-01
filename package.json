@@ -1,6 +1,6 @@
 {
   "name": "@outburn/structure-navigator",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "description": "Navigate and resolve FHIR element definitions using FSH-like paths",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
@@ -66,10 +66,10 @@
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.53.1",
+    "typescript-eslint": "^8.54.0",
     "vitest": "^3.2.4"
   },
   "dependencies": {
-    "lru-cache": "^11.2.4"
+    "lru-cache": "^11.2.5"
   }
 }
