@@ -53,7 +53,7 @@
   "peerDependencies": {
     "@outburn/types": "^0.1.0 || ^0.2.0",
     "fhir-package-explorer": "^1.9.3",
-    "fhir-snapshot-generator": "^2.2.2"
+    "fhir-snapshot-generator": "^2.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
@@ -61,7 +61,7 @@
     "@vercel/ncc": "^0.38.4",
     "eslint": "^9.39.2",
     "fhir-package-explorer": "^1.9.3",
-    "fhir-snapshot-generator": "^2.2.2",
+    "fhir-snapshot-generator": "^2.3.1",
     "fs-extra": "^11.3.3",
     "rimraf": "^6.1.2",
     "tsup": "^8.5.1",
