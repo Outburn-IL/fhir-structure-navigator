@@ -400,9 +400,11 @@ export class FhirStructureNavigator {
             el.__name = el.type.map(t => `${base}${initCap(t.code!)}`);
           }
         } else if (el.contentReference) {
-          // Handle contentReference elements - extract name from contentReference
-          const name = el.contentReference.split('.').pop()!;
-          el.__name = [name];
+          // Handle contentReference elements.
+          // IMPORTANT: the JSON key is the element's own name (last path segment),
+          // not the referenced target name.
+          const lastSegment = el.path.split('.').pop()!;
+          el.__name = [lastSegment];
         }
       }
 

@@ -244,6 +244,14 @@ describe('ElementFetcher', () => {
     expect(el.type?.[0].__kind).toBeDefined();
   });
 
+  it('returns correct __name for contentReference child (Parameters.parameter.part)', async () => {
+    const kids = await fetcher.getChildren('Parameters', 'parameter');
+    const part = kids.find(k => k.id === 'Parameters.parameter.part');
+    expect(part).toBeDefined();
+    expect(part?.contentReference).toBeDefined();
+    expect(part?.__name).toEqual(['part']);
+  });
+
   it('resolves a child of a slice of extension', async () => {
     const el = await fetcher.getElement('us-core-patient', 'extension[race].url');
     expect(el.path).toBe('Extension.url');
