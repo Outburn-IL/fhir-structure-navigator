@@ -184,6 +184,20 @@ export interface NavigatorLruSizes {
   children?: number;
 }
 
+export interface FhirStructureNavigatorInterface {
+  getLogger(): Logger;
+  getFsg(): FhirSnapshotGenerator;
+  getFpe(): FhirPackageExplorer;
+  getElement(
+    snapshotId: string | FileIndexEntryWithPkg,
+    fshPath: string
+  ): Promise<EnrichedElementDefinition>;
+  getChildren(
+    snapshotId: string | FileIndexEntryWithPkg,
+    fshPath: string
+  ): Promise<EnrichedElementDefinition[]>;
+}
+
 /**
  * Build array-based cache key for snapshot cache
  * Format: [normalizedSnapshotId, packageId, packageVersion]
@@ -256,7 +270,7 @@ const buildChildrenCacheKey = (
   }
 };
 
-export class FhirStructureNavigator {
+export class FhirStructureNavigator implements FhirStructureNavigatorInterface {
   private fsg: FhirSnapshotGenerator;
   private logger: Logger;
   private packageContext: string;
