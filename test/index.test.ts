@@ -20,7 +20,7 @@ beforeAll(async () => {
     fpe
   });
   fetcher = new FhirStructureNavigator(fsg);
-}, 900000); // 15 minutes timeout for setup (first-run package downloads can be slow)
+}, 1200000); // 20 minutes timeout for setup (first-run package downloads can be slow)
 
 describe('ElementFetcher', () => {
   it('resolves a normal element path', async () => {
