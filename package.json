@@ -53,7 +53,7 @@
     "url": "git+https://github.com/Outburn-IL/fhir-structure-navigator.git"
   },
   "peerDependencies": {
-    "@outburn/types": "^0.1.0 || ^0.2.0",
+    "@outburn/types": "^0.1.0 || ^0.2.0 || ^1.0.1",
     "fhir-package-explorer": "^1.9.3",
     "fhir-snapshot-generator": "^2.3.1"
   },
